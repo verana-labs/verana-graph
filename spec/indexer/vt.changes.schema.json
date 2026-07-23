@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://verana.io/schemas/v4/vt/changes.schema.json",
+  "title": "ChangeStreamMessage",
+  "description": "Server-side change-stream payloads: the WS `ready` message, the WS `block` message, and the `listChanges` REST response. All three carry per-DID change envelopes (`$defs/ChangeEnvelope`). See `### Websocket Subscriptions` in the indexer spec.",
+
+  "oneOf": [
+    { "$ref": "#/$defs/ReadyMessage" },
+    { "$ref": "#/$defs/BlockMessage" },
+    { "$ref": "#/$defs/ListChangesResponse" }
+  ],
+
+  "$defs": {
+    "Iso8601DateTime": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$",
+      "description": "ISO 8601 / RFC 3339 datetime string in UTC. MUST include the date, the time (with seconds), and the trailing `Z` UTC designator. Fractional seconds are OPTIONAL. Local times, non-UTC offsets (e.g. `+02:00`), date-only values, and timezone-less times are NOT permitted."
+    },
+    "DidString": {
+      "type": "string",
+      "pattern": "^did:"
+    },
+    "Bech32Address": {
+      "type": "string",
+      "pattern": "^verana1[a-z0-9]+$",
+      "description": "Cosmos bech32 address with the `verana` HRP."
+    },
+
+    "ReadyMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "block", "blockTime", "blockIntervalMs"],
+      "description": "Sent once on WebSocket upgrade, before any `subscribe` is processed.",
+      "properties": {
+        "type": { "const": "ready" },
+        "block": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Height of the next block the server will deliver via this WebSocket (i.e. `latestProcessedBlock + 1` at connect time). Clients use `block - 1` as the bootstrap snapshot point."
+        },
+        "blockTime": {
+          "$ref": "#/$defs/Iso8601DateTime",
+          "description": "Wall-clock time at which `block` was committed."
+        },
+        "blockIntervalMs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Expected block production interval in milliseconds. Clients SHOULD treat 2× this value as the liveness timeout for both subscription confirmation and ongoing heartbeat detection."
+        }
+      }
+    },
+
+    "BlockMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "block", "blockTime", "changes"],
+      "description": "Emitted once per processed block, in strictly increasing order of `block`. A `changes[]` array with zero entries still acts as a heartbeat / liveness signal: block production is the keepalive.",
+      "properties": {
+        "type":      { "const": "block" },
+        "block":     { "type": "integer", "minimum": 0 },
+        "blockTime": { "$ref": "#/$defs/Iso8601DateTime", "description": "Wall-clock time at which `block` was committed." },
+        "changes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ChangeEnvelope" }
+        }
+      }
+    },
+
+    "BlockEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["block", "blockTime", "changes"],
+      "description": "A single block inside a `listChanges` response. Shape mirrors `BlockMessage` minus the `type` discriminator.",
+      "properties": {
+        "block":     { "type": "integer", "minimum": 0 },
+        "blockTime": { "$ref": "#/$defs/Iso8601DateTime", "description": "Wall-clock time at which `block` was committed." },
+        "changes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ChangeEnvelope" }
+        }
+      }
+    },
+
+    "ListChangesResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currentBlock", "fromBlock", "blocks"],
+      "description": "Response shape for `GET /vt/v1/changes`. Returns up to `limit` blocks that contain at least one change matching the request filters; change-free blocks are omitted entirely. `nextFromBlock` lets the client jump over arbitrarily long change-free ranges in one hop.",
+      "properties": {
+        "currentBlock": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Latest block the indexer has processed at the time of the response."
+        },
+        "fromBlock": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Echo of the `fromBlock` query parameter."
+        },
+        "blocks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/BlockEntry" },
+          "description": "Up to `limit` blocks in strictly increasing order of `block`."
+        },
+        "nextFromBlock": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Smallest block height strictly greater than the last returned block (or strictly greater than `fromBlock` when `blocks` is empty) for which the indexer knows further changes exist. `null` when the response has reached `currentBlock`."
+        }
+      }
+    },
+
+    "ChangeEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["did"],
+      "description": "One change envelope per DID per block. Each `<channel>` flag is present iff the subscription includes that channel; the flag's value indicates whether the channel changed at this block. `trust` is the only channel whose new values are delivered inline.",
+      "properties": {
+        "did": { "$ref": "#/$defs/DidString" },
+        "trust": {
+          "description": "Inline trust-core values when `trust` is subscribed and any trust-core field changed at this block. `false` when subscribed but unchanged. Omitted when not subscribed.",
+          "oneOf": [
+            { "type": "boolean" },
+            { "$ref": "#/$defs/TrustChange" }
+          ]
+        },
+        "corporation":    { "type": "boolean", "description": "`true` iff the channel is subscribed and changed at this block; `false` otherwise. Omitted when not subscribed." },
+        "participations": { "type": "boolean", "description": "`true` iff the channel is subscribed and changed at this block; `false` otherwise. Omitted when not subscribed." },
+        "ecsCredentials": { "type": "boolean", "description": "`true` iff the channel is subscribed and changed at this block; `false` otherwise. Omitted when not subscribed." },
+        "presentations":  { "type": "boolean", "description": "`true` iff the channel is subscribed and changed at this block; `false` otherwise. Omitted when not subscribed." },
+        "services":       { "type": "boolean", "description": "`true` iff the channel is subscribed and changed at this block; `false` otherwise. Omitted when not subscribed." },
+        "ecosystems":     { "type": "boolean", "description": "`true` iff the channel is subscribed and changed at this block; `false` otherwise. Omitted when not subscribed." }
+      }
+    },
+
+    "TrustChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trusted", "evaluatedAtTime", "evaluatedAtBlock", "expiresAtTime", "corporationId"],
+      "description": "Inline new values of the trust-core fields at the block of the change envelope. Same shape as the trust-core fields in `schemas/v4/vt/response.schema.json`. The `corporationId` carries any DID-to-Corp re-binding that occurred at this block.",
+      "properties": {
+        "trusted":          { "type": "boolean" },
+        "evaluatedAtTime":  { "$ref": "#/$defs/Iso8601DateTime" },
+        "evaluatedAtBlock": { "type": "integer", "minimum": 0 },
+        "expiresAtTime":    { "oneOf": [{ "$ref": "#/$defs/Iso8601DateTime" }, { "type": "null" }], "description": "Earliest trust-flipping boundary per [IDX-VT-EVAL-2]; `null` when no boundary exists. NOT a TTL." },
+        "corporationId":    { "type": "integer", "minimum": 0, "description": "Stable `uint64` id of the Corporation that owns the resolved DID (the unique Corporation whose `did` equals the resolved DID, per VPR's per-Corporation `did` uniqueness invariant)." }
+      }
+    }
+  }
+}
