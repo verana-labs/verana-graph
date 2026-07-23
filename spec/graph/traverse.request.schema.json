@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://verana.io/schemas/v4/graph/traverse/request.schema.json",
+  "title": "TraverseRequest",
+  "description": "Request payload for the verana-graph canonical traversal queries [TG-QRY-3]. The single endpoint `POST /v4/graph/traverse` dispatches on the `query` selector; the `input` shape is fixed per query. See `### Traversal REST binding` in the verana-graph spec.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["query", "input"],
+  "properties": {
+    "query": { "$ref": "#/$defs/TraversalQueryId" },
+    "input": {
+      "type": "object",
+      "description": "Per-query input shape; constrained by the discriminated `allOf` branch matching `query`."
+    }
+  },
+  "allOf": [
+    { "if": { "properties": { "query": { "const": "A1" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/DidInput" } } } },
+    { "if": { "properties": { "query": { "const": "A2" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/DidInput" } } } },
+    { "if": { "properties": { "query": { "const": "A3" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/DidInput" } } } },
+    { "if": { "properties": { "query": { "const": "A4" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/DidInput" } } } },
+    { "if": { "properties": { "query": { "const": "A5" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/DidEcsSchemaInput" } } } },
+    { "if": { "properties": { "query": { "const": "A6" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/DidEcsSchemaInput" } } } },
+    { "if": { "properties": { "query": { "const": "A7" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/DidRoleInput" } } } },
+    { "if": { "properties": { "query": { "const": "B1" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/CredentialIdInput" } } } },
+    { "if": { "properties": { "query": { "const": "B2" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/CredentialIdInput" } } } },
+    { "if": { "properties": { "query": { "const": "C1" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/EcosystemIdInput" } } } },
+    { "if": { "properties": { "query": { "const": "C2" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/EcosystemRoleSchemaInput" } } } },
+    { "if": { "properties": { "query": { "const": "C3" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/EcosystemIdInput" } } } },
+    { "if": { "properties": { "query": { "const": "D1" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/CredentialSchemaIdInput" } } } },
+    { "if": { "properties": { "query": { "const": "D2" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/CredentialSchemaIdRoleInput" } } } },
+    { "if": { "properties": { "query": { "const": "E1" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/CorporationIdInput" } } } },
+    { "if": { "properties": { "query": { "const": "E2" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/CorporationIdInput" } } } },
+    { "if": { "properties": { "query": { "const": "E3" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/CorporationIdInput" } } } },
+    { "if": { "properties": { "query": { "const": "F1" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/PathInput" } } } },
+    { "if": { "properties": { "query": { "const": "G1" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/ParticipantIdInput" } } } }
+  ],
+  "$defs": {
+    "TraversalQueryId": {
+      "enum": ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "B1", "B2", "C1", "C2", "C3", "D1", "D2", "E1", "E2", "E3", "F1", "G1"],
+      "description": "Canonical traversal query id from [TG-QRY-3]. A1\u2013A7 DID-rooted, B1\u2013B2 credential-rooted, C1\u2013C3 ecosystem-rooted, D1\u2013D2 schema-rooted, E1\u2013E3 corporation-rooted, F1 path (SHOULD), G1 Participant-rooted (validator chain)."
+    },
+    "DidString": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "DID URI."
+    },
+    "Bech32Address": {
+      "type": "string",
+      "pattern": "^verana1[a-z0-9]+$",
+      "description": "Cosmos bech32 address with the `verana` HRP. Used for the per-Participant `vsOperator` account and for `Corporation.policyAddress`."
+    },
+    "EcsSchemaName": {
+      "enum": ["ServiceCredential", "OrganizationCredential", "PersonaCredential", "UserAgentCredential"],
+      "description": "ECS schema discriminator."
+    },
+    "ParticipantRole": {
+      "enum": ["HOLDER", "ISSUER", "VERIFIER", "ISSUER_GRANTOR", "VERIFIER_GRANTOR", "ECOSYSTEM"]
+    },
+    "EntityType": {
+      "enum": ["Did", "Corporation", "Ecosystem", "CredentialSchema", "Participant", "EcsCredential", "Vtc", "LinkedVerifiablePresentation", "ServiceEndpoint"],
+      "description": "Graph entity type discriminator."
+    },
+    "DidInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["did"],
+      "properties": {
+        "did": { "$ref": "#/$defs/DidString", "description": "Anchor DID for the query." }
+      }
+    },
+    "DidEcsSchemaInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["did"],
+      "properties": {
+        "did": { "$ref": "#/$defs/DidString" },
+        "ecsSchema": { "$ref": "#/$defs/EcsSchemaName", "description": "Optional ECS schema filter (A5/A6 only)." }
+      }
+    },
+    "DidRoleInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["did"],
+      "properties": {
+        "did": { "$ref": "#/$defs/DidString" },
+        "role": { "$ref": "#/$defs/ParticipantRole", "description": "Optional role filter (A7 only)." }
+      }
+    },
+    "CredentialIdInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["credentialId"],
+      "properties": {
+        "credentialId": {
+          "type": "string",
+          "description": "Identity of the credential record \u2014 either an `EcsCredential.id` or a `Vtc.id`. The graph dispatches on the actual record type internally."
+        }
+      }
+    },
+    "EcosystemIdInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ecosystemId"],
+      "properties": {
+        "ecosystemId": { "type": "integer", "minimum": 0, "description": "Stable VPR id of the Ecosystem." }
+      }
+    },
+    "EcosystemRoleSchemaInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ecosystemId"],
+      "properties": {
+        "ecosystemId": { "type": "integer", "minimum": 0 },
+        "role": { "$ref": "#/$defs/ParticipantRole", "description": "Optional role filter (C2 only)." },
+        "credentialSchemaId": { "type": "integer", "minimum": 0, "description": "Optional schema filter to scope to one of the Ecosystem's owned schemas (C2 only)." }
+      }
+    },
+    "CredentialSchemaIdInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["credentialSchemaId"],
+      "properties": {
+        "credentialSchemaId": { "type": "integer", "minimum": 0, "description": "Stable VPR id of the CredentialSchema." }
+      }
+    },
+    "CredentialSchemaIdRoleInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["credentialSchemaId"],
+      "properties": {
+        "credentialSchemaId": { "type": "integer", "minimum": 0 },
+        "role": { "$ref": "#/$defs/ParticipantRole", "description": "Optional role filter (D2 only)." }
+      }
+    },
+    "CorporationIdInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["corporationId"],
+      "properties": {
+        "corporationId": { "type": "integer", "minimum": 0, "description": "Stable `uint64` id of the Corporation (mirrors VPR `Corporation.id`)." }
+      }
+    },
+    "PathInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "$ref": "#/$defs/EntityRef", "description": "Path source entity." },
+        "to": { "$ref": "#/$defs/EntityRef", "description": "Path target entity." }
+      }
+    },
+    "EntityRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "$ref": "#/$defs/EntityType" },
+        "id": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "integer", "minimum": 0 }
+          ],
+          "description": "Primary key of the referenced entity. DID for `type = Did`, integer VPR id for `Corporation` / `Ecosystem` / `CredentialSchema` / `Participant`, string id for `EcsCredential` / `Vtc` / `LinkedVerifiablePresentation` / `ServiceEndpoint`."
+        }
+      }
+    },
+    "ParticipantIdInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["participantId"],
+      "properties": {
+        "participantId": { "type": "integer", "minimum": 0, "description": "Stable VPR id of the leaf `Participant` from which to walk the validator chain upward to the `ECOSYSTEM`-role root (mirrors VPR `Participant.id`). G1 only." }
+      }
+    }
+  }
+}
