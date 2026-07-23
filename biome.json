@@ -1,0 +1,84 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "maxSize": 10000000,
+    "includes": [
+      "**/*.ts",
+      "**/*.json",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/coverage",
+      "!**/pnpm-lock.yaml",
+      "!**/spec"
+    ]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "lineWidth": 110
+  },
+  "javascript": {
+    "formatter": {
+      "semicolons": "asNeeded",
+      "quoteStyle": "single",
+      "trailingCommas": "all",
+      "arrowParentheses": "asNeeded",
+      "bracketSpacing": true,
+      "indentStyle": "space",
+      "lineWidth": 110
+    }
+  },
+  "json": {
+    "parser": {
+      "allowComments": true
+    }
+  },
+  "assist": { "actions": { "source": { "organizeImports": "off" } } },
+  "linter": {
+    "rules": {
+      "style": {
+        "useImportType": "off",
+        "useNodejsImportProtocol": "off",
+        "noNonNullAssertion": "warn"
+      },
+      "correctness": {
+        "noUnusedVariables": {
+          "level": "warn",
+          "fix": "safe"
+        },
+        "noUnusedFunctionParameters": "off",
+        "noUnusedImports": "warn",
+        "noUndeclaredDependencies": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.test.ts", "**/*.spec.ts", "**/test/**", "**/scripts/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noNonNullAssertedOptionalChain": "off"
+          },
+          "complexity": {
+            "useArrowFunction": "off"
+          }
+        }
+      }
+    }
+  ]
+}
