@@ -1,10 +1,10 @@
-import { createHash } from 'crypto'
+import { createHash } from 'node:crypto'
 import { Knex } from 'knex'
 import { Config } from '../config.js'
 import { IndexerRestClient } from '../indexer/rest.js'
 import { GovernanceFramework, PresentationEntry } from '../indexer/types.js'
-import { SchemaLoadRequest } from '../ingest/reconciler.js'
 import { extractSubjectText } from '../ingest/denorm.js'
+import { SchemaLoadRequest } from '../ingest/reconciler.js'
 import { Logger } from '../util/logger.js'
 
 export function digestSriOf(bytes: string, algo: 'sha256' | 'sha384' | 'sha512'): string {
@@ -122,7 +122,7 @@ export class Dereferencer {
     )
   }
 
-  // TG-DEREF-3 optional VP body fetch, deduplicated per (URL, block) (TG-DEREF-4 mutable tier)
+  // TG-DEREF-3 optional VP body fetch, deduplicated per (URL, block) (TG-DEREF-4 mutable tier).
   async fetchVpBodies(did: string, presentations: PresentationEntry[], block: number): Promise<void> {
     if (!this.config.fetchVpBodies) return
     for (const p of presentations) {

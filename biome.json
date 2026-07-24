@@ -37,12 +37,21 @@
       "allowComments": true
     }
   },
-  "assist": { "actions": { "source": { "organizeImports": "off" } } },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
   "linter": {
     "rules": {
       "style": {
         "useImportType": "off",
-        "useNodejsImportProtocol": "off",
+        "useNodejsImportProtocol": {
+          "level": "error",
+          "fix": "safe"
+        },
         "noNonNullAssertion": "warn"
       },
       "correctness": {
@@ -53,6 +62,9 @@
         "noUnusedFunctionParameters": "off",
         "noUnusedImports": "warn",
         "noUndeclaredDependencies": "off"
+      },
+      "nursery": {
+        "noImportCycles": "error"
       }
     }
   },

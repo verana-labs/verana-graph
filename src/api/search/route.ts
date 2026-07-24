@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs'
+import { readFileSync } from 'node:fs'
 import { Ajv2020 as Ajv, ValidateFunction } from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 import { FastifyInstance } from 'fastify'

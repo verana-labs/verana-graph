@@ -1,5 +1,5 @@
-import { Server, createServer } from 'http'
-import { AddressInfo } from 'net'
+import { createServer, Server } from 'node:http'
+import { AddressInfo } from 'node:net'
 import { WebSocket, WebSocketServer } from 'ws'
 import { BlockMessage, ChangeEnvelope, ResolveResponse } from '../../src/indexer/types.js'
 

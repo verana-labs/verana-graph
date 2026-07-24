@@ -1,13 +1,13 @@
-import { EventEmitter } from 'events'
+import { EventEmitter } from 'node:events'
 import { Knex } from 'knex'
 import { Dereferencer } from '../deref/deref.js'
 import { IndexerRestClient } from '../indexer/rest.js'
 import {
   BlockMessage,
   ChangeEnvelope,
+  needsResolve,
   ReadyMessage,
   ResolveResponse,
-  needsResolve,
 } from '../indexer/types.js'
 import { IndexerSubscription } from '../indexer/ws.js'
 import { Logger } from '../util/logger.js'

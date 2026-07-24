@@ -3,10 +3,10 @@ import { ApiError } from '../../src/api/errors.js'
 import { decodeCursor, encodeCursor, queryHash } from '../../src/api/search/cursor.js'
 import { normalizeFilterValue, resolveFieldSpec } from '../../src/api/search/registry.js'
 import { digestSriOf } from '../../src/deref/deref.js'
-import { extractSubjectText, identityFromCredentials } from '../../src/ingest/denorm.js'
-import { ecsCredentialId } from '../../src/ingest/reconciler.js'
 import { canonicalResolveBody } from '../../src/indexer/rest.js'
 import { CANONICAL_SUBSCRIBE } from '../../src/indexer/ws.js'
+import { extractSubjectText, identityFromCredentials } from '../../src/ingest/denorm.js'
+import { ecsCredentialId } from '../../src/ingest/reconciler.js'
 
 describe('cursor', () => {
   it('round-trips and binds to its query', () => {
@@ -36,6 +36,8 @@ describe('filter normalization (TG-FCT-3 value forms)', () => {
 
   it('per-surface field registry rejects unknown fields and wrong operators', () => {
     expect(() => resolveFieldSpec('Did', 'Did.nonsense')).toThrowError(ApiError)
+    expect(() => resolveFieldSpec('Did', '__proto__')).toThrowError(ApiError)
+    expect(() => resolveFieldSpec('Did', 'constructor')).toThrowError(ApiError)
     const spec = resolveFieldSpec('Did', 'OrganizationCredential.lei')
     expect(spec.ops).toEqual(['eq'])
     expect(resolveFieldSpec('Ecosystem', 'participants[ISSUER]').ops).toEqual(['range'])

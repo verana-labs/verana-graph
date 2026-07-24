@@ -4,7 +4,7 @@ import { Dereferencer } from '../../src/deref/deref.js'
 import { IndexerRestClient } from '../../src/indexer/rest.js'
 import { IngestOrchestrator } from '../../src/ingest/orchestrator.js'
 import { createLogger } from '../../src/util/logger.js'
-import { DIDS, buildWorld } from '../harness/fixture.js'
+import { buildWorld, DIDS } from '../harness/fixture.js'
 import { MockIndexer } from '../harness/mock-indexer.js'
 import { freshDb, testConfig, waitFor } from '../harness/setup.js'
 

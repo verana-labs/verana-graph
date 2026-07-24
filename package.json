@@ -21,10 +21,10 @@
     "check-format": "biome check .",
     "lint": "biome lint --write .",
     "validate": "pnpm lint && pnpm check-types && pnpm check-format",
-    "test": "vitest run --exclude 'test/e2e/**'",
+    "test": "vitest run --exclude 'test/integration/**'",
     "test:all": "vitest run",
     "prepare": "corepack enable",
-    "test:db": "vitest run test/e2e"
+    "test:db": "vitest run test/integration"
   },
   "dependencies": {
     "ajv": "^8.17.1",

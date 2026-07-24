@@ -4,8 +4,8 @@ import { Dereferencer } from '../../src/deref/deref.js'
 import { IndexerRestClient } from '../../src/indexer/rest.js'
 import { IngestOrchestrator } from '../../src/ingest/orchestrator.js'
 import { createLogger } from '../../src/util/logger.js'
-import { DIDS, buildWorld, issuerSnapshot, vsSnapshot } from '../harness/fixture.js'
-import { MockIndexer, block } from '../harness/mock-indexer.js'
+import { buildWorld, DIDS, issuerSnapshot, vsSnapshot } from '../harness/fixture.js'
+import { block, MockIndexer } from '../harness/mock-indexer.js'
 import { freshDb, testConfig, waitFor } from '../harness/setup.js'
 
 const log = createLogger('silent')

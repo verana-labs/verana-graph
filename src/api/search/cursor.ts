@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { createHash } from 'node:crypto'
 import { ApiError } from '../errors.js'
 
 export interface CursorPayload {

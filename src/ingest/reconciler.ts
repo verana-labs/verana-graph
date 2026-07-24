@@ -2,8 +2,8 @@ import { Knex } from 'knex'
 import { EcsCredentialEntry, ResolveResponse, TrustChange } from '../indexer/types.js'
 import {
   EMPTY_IDENTITY,
-  OperativeIdentity,
   identityFromCredentials,
+  OperativeIdentity,
   schemaTextForDid,
   serviceFacets,
   vtcTextForDid,

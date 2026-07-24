@@ -209,7 +209,7 @@ export function resolveFieldSpec(surface: string, field: string): FieldSpec {
   }
   const registry = table[surface]
   if (!registry) throw new ApiError('INVALID_REQUEST', `unknown surface ${surface}`)
-  const found = registry[field]
+  const found = Object.hasOwn(registry, field) ? registry[field] : undefined
   if (found) return found
   if (surface === 'Ecosystem') {
     const m = field.match(PARTICIPANTS_ROLE_RE)

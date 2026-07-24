@@ -1,18 +1,18 @@
 import { Knex } from 'knex'
 import { ApiError } from '../errors.js'
 import {
-  DidRow,
-  EcsCredentialRow,
-  ParticipantRow,
-  VtcRow,
   corporationRef,
+  DidRow,
   didRef,
+  EcsCredentialRow,
   ecosystemRef,
   ecsCredentialRef,
   isTrustExpired,
+  ParticipantRow,
   participantRef,
   schemaRef,
   serviceEndpointRef,
+  VtcRow,
   vtcRef,
 } from '../refs.js'
 

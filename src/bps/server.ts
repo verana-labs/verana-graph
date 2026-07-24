@@ -1,4 +1,4 @@
-import { Server } from 'http'
+import { Server } from 'node:http'
 import { WebSocket, WebSocketServer } from 'ws'
 import { BlockCommit, IngestOrchestrator } from '../ingest/orchestrator.js'
 import { Logger } from '../util/logger.js'
