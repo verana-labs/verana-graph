@@ -1,6 +1,6 @@
 import { Knex } from 'knex'
-import { Config } from '../../src/config.js'
-import { createDb } from '../../src/db/knex.js'
+import { Config } from '../../src/config'
+import { createDb } from '../../src/db/knex'
 
 export const TEST_DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgres://verana:verana@localhost:5433/verana_graph'

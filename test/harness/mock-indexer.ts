@@ -1,7 +1,7 @@
 import { createServer, Server } from 'node:http'
 import { AddressInfo } from 'node:net'
 import { WebSocket, WebSocketServer } from 'ws'
-import { BlockMessage, ChangeEnvelope, ResolveResponse } from '../../src/indexer/types.js'
+import { BlockMessage, ChangeEnvelope, ResolveResponse } from '../../src/indexer/types'
 
 // A test double for the indexer's documented Verifiable Trust contract: resolve with
 // At-Block-Height, DID enumeration, listChanges gap recovery, and the subscribe WebSocket.

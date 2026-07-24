@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { ApiError } from '../errors.js'
+import { ApiError } from '../errors'
 
 export interface CursorPayload {
   s: number

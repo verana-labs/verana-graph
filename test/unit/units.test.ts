@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { ApiError } from '../../src/api/errors.js'
-import { decodeCursor, encodeCursor, queryHash } from '../../src/api/search/cursor.js'
-import { normalizeFilterValue, resolveFieldSpec } from '../../src/api/search/registry.js'
-import { digestSriOf } from '../../src/deref/deref.js'
-import { canonicalResolveBody } from '../../src/indexer/rest.js'
-import { CANONICAL_SUBSCRIBE } from '../../src/indexer/ws.js'
-import { extractSubjectText, identityFromCredentials } from '../../src/ingest/denorm.js'
-import { ecsCredentialId } from '../../src/ingest/reconciler.js'
+import { ApiError } from '../../src/api/errors'
+import { decodeCursor, encodeCursor, queryHash } from '../../src/api/search/cursor'
+import { normalizeFilterValue, resolveFieldSpec } from '../../src/api/search/registry'
+import { digestSriOf } from '../../src/deref/deref'
+import { canonicalResolveBody } from '../../src/indexer/rest'
+import { CANONICAL_SUBSCRIBE } from '../../src/indexer/ws'
+import { extractSubjectText, identityFromCredentials } from '../../src/ingest/denorm'
+import { ecsCredentialId } from '../../src/ingest/reconciler'
 
 describe('cursor', () => {
   it('round-trips and binds to its query', () => {

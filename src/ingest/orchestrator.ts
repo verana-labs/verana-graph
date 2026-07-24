@@ -1,17 +1,11 @@
 import { EventEmitter } from 'node:events'
 import { Knex } from 'knex'
-import { Dereferencer } from '../deref/deref.js'
-import { IndexerRestClient } from '../indexer/rest.js'
-import {
-  BlockMessage,
-  ChangeEnvelope,
-  needsResolve,
-  ReadyMessage,
-  ResolveResponse,
-} from '../indexer/types.js'
-import { IndexerSubscription } from '../indexer/ws.js'
-import { Logger } from '../util/logger.js'
-import { applyInlineTrust, reconcile, repairDerivedFacets } from './reconciler.js'
+import { Dereferencer } from '../deref/deref'
+import { IndexerRestClient } from '../indexer/rest'
+import { BlockMessage, ChangeEnvelope, needsResolve, ReadyMessage, ResolveResponse } from '../indexer/types'
+import { IndexerSubscription } from '../indexer/ws'
+import { Logger } from '../util/logger'
+import { applyInlineTrust, reconcile, repairDerivedFacets } from './reconciler'
 
 export interface BlockCommit {
   block: number

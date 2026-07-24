@@ -1,5 +1,5 @@
 import { Knex } from 'knex'
-import { EcsCredentialEntry, ResolveResponse } from '../indexer/types.js'
+import { EcsCredentialEntry, ResolveResponse } from '../indexer/types'
 
 function str(v: unknown): string | null {
   return typeof v === 'string' && v.length > 0 ? v : null

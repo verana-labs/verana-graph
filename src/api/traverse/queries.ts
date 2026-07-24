@@ -1,5 +1,5 @@
 import { Knex } from 'knex'
-import { ApiError } from '../errors.js'
+import { ApiError } from '../errors'
 import {
   corporationRef,
   DidRow,
@@ -14,7 +14,7 @@ import {
   serviceEndpointRef,
   VtcRow,
   vtcRef,
-} from '../refs.js'
+} from '../refs'
 
 type Json = Record<string, unknown>
 

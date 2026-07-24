@@ -1,5 +1,5 @@
-import { loadConfig } from '../config.js'
-import { createDb } from './knex.js'
+import { loadConfig } from '../config'
+import { createDb } from './knex'
 
 const db = createDb(loadConfig().databaseUrl)
 const [, applied] = await db.migrate.latest()

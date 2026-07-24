@@ -1,12 +1,12 @@
 import { Knex } from 'knex'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { Dereferencer } from '../../src/deref/deref.js'
-import { IndexerRestClient } from '../../src/indexer/rest.js'
-import { IngestOrchestrator } from '../../src/ingest/orchestrator.js'
-import { createLogger } from '../../src/util/logger.js'
-import { buildWorld, DIDS, issuerSnapshot, vsSnapshot } from '../harness/fixture.js'
-import { block, MockIndexer } from '../harness/mock-indexer.js'
-import { freshDb, testConfig, waitFor } from '../harness/setup.js'
+import { Dereferencer } from '../../src/deref/deref'
+import { IndexerRestClient } from '../../src/indexer/rest'
+import { IngestOrchestrator } from '../../src/ingest/orchestrator'
+import { createLogger } from '../../src/util/logger'
+import { buildWorld, DIDS, issuerSnapshot, vsSnapshot } from '../harness/fixture'
+import { block, MockIndexer } from '../harness/mock-indexer'
+import { freshDb, testConfig, waitFor } from '../harness/setup'
 
 const log = createLogger('silent')
 
@@ -114,7 +114,7 @@ describe('ingestion lifecycle', () => {
 
   it('TG-ACT-2: archive flips are observed in both directions and never delete', async () => {
     await bootstrapped()
-    const { ecoSnapshot } = await import('../harness/fixture.js')
+    const { ecoSnapshot } = await import('../harness/fixture')
     mock.world.snapshots.get(DIDS.eco)?.set(102, ecoSnapshot(true))
     mock.pushBlock(block(102, [{ did: DIDS.eco, ecosystems: true }]))
     await waitFor(async () => (await db('credential_schemas').where('id', 101).first())?.archived === true)

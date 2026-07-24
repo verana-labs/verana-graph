@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto'
 import { Knex } from 'knex'
-import { Config } from '../config.js'
-import { IndexerRestClient } from '../indexer/rest.js'
-import { GovernanceFramework, PresentationEntry } from '../indexer/types.js'
-import { extractSubjectText } from '../ingest/denorm.js'
-import { SchemaLoadRequest } from '../ingest/reconciler.js'
-import { Logger } from '../util/logger.js'
-import { type DidDocResolver, resolveWebvhDidDocument, verifyVpSignature } from './vpVerify.js'
+import { Config } from '../config'
+import { IndexerRestClient } from '../indexer/rest'
+import { GovernanceFramework, PresentationEntry } from '../indexer/types'
+import { extractSubjectText } from '../ingest/denorm'
+import { SchemaLoadRequest } from '../ingest/reconciler'
+import { Logger } from '../util/logger'
+import { type DidDocResolver, resolveWebvhDidDocument, verifyVpSignature } from './vpVerify'
 
 export function digestSriOf(bytes: string, algo: 'sha256' | 'sha384' | 'sha512'): string {
   const hash = createHash(algo).update(bytes, 'utf8').digest('base64')

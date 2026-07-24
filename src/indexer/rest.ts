@@ -1,4 +1,4 @@
-import { ListChangesResponse, ListDidsResponse, ResolveResponse } from './types.js'
+import { ListChangesResponse, ListDidsResponse, ResolveResponse } from './types'
 
 export class IndexerHttpError extends Error {
   constructor(

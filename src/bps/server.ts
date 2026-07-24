@@ -1,7 +1,7 @@
 import { Server } from 'node:http'
 import { WebSocket, WebSocketServer } from 'ws'
-import { BlockCommit, IngestOrchestrator } from '../ingest/orchestrator.js'
-import { Logger } from '../util/logger.js'
+import { BlockCommit, IngestOrchestrator } from '../ingest/orchestrator'
+import { Logger } from '../util/logger'
 
 // TG-BPS-1..7: anonymous, forward-only broadcast of lastAppliedBlock. No parameters, no replay,
 // one notification per durable commit, slow clients disconnected rather than buffered.

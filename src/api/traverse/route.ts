@@ -3,8 +3,8 @@ import { Ajv2020 as Ajv, ValidateFunction } from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 import { FastifyInstance } from 'fastify'
 import { Knex } from 'knex'
-import { ApiError } from '../errors.js'
-import * as q from './queries.js'
+import { ApiError } from '../errors'
+import * as q from './queries'
 
 type Handler = (db: Knex, input: never) => Promise<unknown>
 

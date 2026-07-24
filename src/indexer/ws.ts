@@ -1,6 +1,6 @@
 import { WebSocket } from 'ws'
-import { Logger } from '../util/logger.js'
-import { BlockMessage, ReadyMessage } from './types.js'
+import { Logger } from '../util/logger'
+import { BlockMessage, ReadyMessage } from './types'
 
 // TG-INGEST-1: all channels on, all opt-in sub-flags true, dids[] omitted (wildcard)
 export const CANONICAL_SUBSCRIBE = {

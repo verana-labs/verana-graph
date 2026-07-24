@@ -1,6 +1,6 @@
-import { digestSriOf } from '../../src/deref/deref.js'
-import { ResolveResponse } from '../../src/indexer/types.js'
-import { MockWorld } from './mock-indexer.js'
+import { digestSriOf } from '../../src/deref/deref'
+import { ResolveResponse } from '../../src/indexer/types'
+import { MockWorld } from './mock-indexer'
 
 // A compact world exercising every entity and edge:
 //   corp 42 (did:mock:corp) controls ecosystem 7 (did:mock:eco) owning schemas 100 (service),

@@ -1,5 +1,5 @@
 import { Knex } from 'knex'
-import { EcsCredentialEntry, ResolveResponse, TrustChange } from '../indexer/types.js'
+import { EcsCredentialEntry, ResolveResponse, TrustChange } from '../indexer/types'
 import {
   EMPTY_IDENTITY,
   identityFromCredentials,
@@ -7,7 +7,7 @@ import {
   schemaTextForDid,
   serviceFacets,
   vtcTextForDid,
-} from './denorm.js'
+} from './denorm'
 
 export interface Evidence {
   block: number

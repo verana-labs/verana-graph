@@ -1,12 +1,12 @@
 import { Knex } from 'knex'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { Dereferencer } from '../../src/deref/deref.js'
-import { IndexerRestClient } from '../../src/indexer/rest.js'
-import { IngestOrchestrator } from '../../src/ingest/orchestrator.js'
-import { createLogger } from '../../src/util/logger.js'
-import { buildWorld, DIDS } from '../harness/fixture.js'
-import { MockIndexer } from '../harness/mock-indexer.js'
-import { freshDb, testConfig, waitFor } from '../harness/setup.js'
+import { Dereferencer } from '../../src/deref/deref'
+import { IndexerRestClient } from '../../src/indexer/rest'
+import { IngestOrchestrator } from '../../src/ingest/orchestrator'
+import { createLogger } from '../../src/util/logger'
+import { buildWorld, DIDS } from '../harness/fixture'
+import { MockIndexer } from '../harness/mock-indexer'
+import { freshDb, testConfig, waitFor } from '../harness/setup'
 
 const log = createLogger('silent')
 
