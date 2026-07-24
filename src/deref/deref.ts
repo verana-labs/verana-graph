@@ -6,6 +6,7 @@ import { GovernanceFramework, PresentationEntry } from '../indexer/types.js'
 import { extractSubjectText } from '../ingest/denorm.js'
 import { SchemaLoadRequest } from '../ingest/reconciler.js'
 import { Logger } from '../util/logger.js'
+import { type DidDocResolver, resolveWebvhDidDocument, verifyVpSignature } from './vpVerify.js'
 
 export function digestSriOf(bytes: string, algo: 'sha256' | 'sha384' | 'sha512'): string {
   const hash = createHash(algo).update(bytes, 'utf8').digest('base64')
@@ -27,6 +28,7 @@ export class Dereferencer {
     private readonly rest: IndexerRestClient,
     private readonly config: Config,
     private readonly log: Logger,
+    private readonly resolveDidDoc: DidDocResolver = resolveWebvhDidDocument,
   ) {}
 
   // TG-DEREF-2 step 1: load once, validate against digestSri, then insert the record. The row
@@ -123,6 +125,8 @@ export class Dereferencer {
   }
 
   // TG-DEREF-3 optional VP body fetch, deduplicated per (URL, block) (TG-DEREF-4 mutable tier).
+  // The fetched body is holder-controlled: its signature is re-verified against the holder's
+  // DID Document before any claim is extracted (TG-DEREF-3).
   async fetchVpBodies(did: string, presentations: PresentationEntry[], block: number): Promise<void> {
     if (!this.config.fetchVpBodies) return
     for (const p of presentations) {
@@ -132,6 +136,11 @@ export class Dereferencer {
         const res = await fetch(p.id)
         if (!res.ok) continue
         const vp = (await res.json()) as { verifiableCredential?: unknown[] }
+        const verdict = await verifyVpSignature(vp as Record<string, unknown>, did, this.resolveDidDoc)
+        if (!verdict.verified) {
+          this.log.warn({ vp: p.id, reason: verdict.reason }, 'vp signature re-verification failed')
+          continue
+        }
         const creds = Array.isArray(vp.verifiableCredential) ? vp.verifiableCredential : []
         const wanted = new Map(p.vtcCredentials.map(v => [v.id, v]))
         for (const cred of creds) {
