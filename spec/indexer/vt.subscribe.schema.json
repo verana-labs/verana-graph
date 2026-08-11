@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://verana.io/schemas/v4/vt/subscribe.schema.json",
+  "title": "WebSocketControlMessage",
+  "description": "Control messages sent by the client to the server over a `/vt/v1/subscribe` WebSocket connection. The first control message MUST be a `subscribe`; a subsequent `subscribe` replaces the active subscription; an `unsubscribe` (or socket close) stops notifications. See `### Websocket Subscriptions` in the indexer spec.",
+
+  "oneOf": [
+    { "$ref": "#/$defs/Subscribe" },
+    { "$ref": "#/$defs/Unsubscribe" }
+  ],
+
+  "$defs": {
+    "DidString": {
+      "type": "string",
+      "pattern": "^did:"
+    },
+
+    "Subscribe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "channels"],
+      "description": "Subscribe (or replace the current subscription) for the WebSocket connection.",
+      "properties": {
+        "action": { "const": "subscribe" },
+        "dids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/DidString" },
+          "description": "DIDs to subscribe to. Omit (or send an empty array) to subscribe to every DID indexed by this resolver."
+        },
+        "channels": { "$ref": "#/$defs/Channels" }
+      }
+    },
+
+    "Unsubscribe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "description": "Stop receiving notifications on this connection. Equivalent to closing the socket.",
+      "properties": {
+        "action": { "const": "unsubscribe" }
+      }
+    },
+
+    "Channels": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Map from channel name to either a boolean (use defaults) or a sub-options object. Channels not listed are excluded from the stream.",
+      "properties": {
+        "trust": {
+          "type": "boolean",
+          "default": false,
+          "description": "Trigger when a re-evaluation event ([IDX-VT-EVAL-3]: state-affecting message, consumed TriggerResolver, or dependency cascade) changes any of the persisted trust-core fields (`trusted`, `evaluatedAtTime`, `evaluatedAtBlock`, `expiresAtTime`, `corporationId`). The new values are delivered inline (see `changes.schema.json` `#/$defs/TrustChange`). The top-level `corporationId` rotation (DID re-binding to a different Corporation) is signalled here. A passive wall-clock crossing of `expiresAtTime` is not a change event."
+        },
+        "corporation": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "$ref": "#/$defs/CorporationOptions" }
+          ],
+          "description": "Trigger on creation or removal (the DID is bound to a Corporation, or that binding ends — e.g. a `Corporation.did` rotation away from this DID), a slash event, CGF rotation, or any CGF document change of the singular `corporation` object the DID represents. Per VPR's per-Corporation `did` uniqueness invariant, a DID is the `did` of at most one Corporation. The top-level `corporationId` scalar itself (the binding \"this DID is operated by *that* Corp\") is part of the `trust` channel and is not gated separately. Sub-flag `includeDepositChanges` adds notifications for plain `deposit` Coin-amount fluctuations on the represented Corporation."
+        },
+        "participations": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "$ref": "#/$defs/ParticipationsOptions" }
+          ],
+          "description": "Trigger on Participant entries being created or transitioning state. Sub-flags add notifications for `weight` fluctuations and high-frequency counter changes."
+        },
+        "ecsCredentials": {
+          "type": "boolean",
+          "default": false,
+          "description": "Trigger when an ECS credential issued to or by the DID is added, replaced, or invalidated."
+        },
+        "presentations": {
+          "type": "boolean",
+          "default": false,
+          "description": "Trigger when a `LinkedVerifiablePresentation` referenced by the DID Document is added or removed, or its `vtcCredentialIds[]` set changes. Changes confined to `unresolvableCredentialIds[]` or `invalidCredentialIds[]` are NOT notified."
+        },
+        "services": {
+          "type": "boolean",
+          "default": false,
+          "description": "Trigger when a non-LinkedVerifiablePresentation service entry in the DID Document changes (DIDComm, MCP, A2A, VsAgentAdminAPI, …)."
+        },
+        "ecosystems": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "$ref": "#/$defs/EcosystemsOptions" }
+          ],
+          "description": "Trigger when an Ecosystem entry the DID represents is created, archived, or its embedded schemas change. Sub-flags add notifications for high-frequency counter changes."
+        }
+      }
+    },
+
+    "CorporationOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "includeDepositChanges": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, changes in the represented Corporation's `deposit` Coin amount trigger a notification (independent of slash events, which always trigger)."
+        }
+      }
+    },
+
+    "ParticipationsOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "includeWeightChanges": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, changes in a Participant's `weight` Coin amount trigger a notification."
+        },
+        "includeParticipantCounts": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, changes in `participants[role]` counters trigger a notification."
+        },
+        "includeIssuedCredentials": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, changes in the `issuedCredentials` counter trigger a notification."
+        },
+        "includeVerifiedCredentials": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, changes in the `verifiedCredentials` counter trigger a notification."
+        }
+      }
+    },
+
+    "EcosystemsOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "includeParticipantCounts": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, changes in the ecosystem-level `participants[role]` counters trigger a notification."
+        },
+        "includeIssuedCredentials": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, changes in the ecosystem-level `issuedCredentials` counter trigger a notification."
+        },
+        "includeVerifiedCredentials": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, changes in the ecosystem-level `verifiedCredentials` counter trigger a notification."
+        }
+      }
+    }
+  }
+}

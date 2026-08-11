@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://verana.io/schemas/v4/graph/search/request.schema.json",
+  "title": "SearchRequest",
+  "description": "Request payload for the verana-graph faceted-search endpoint `POST /v4/graph/search` (per [TG-FCT-1] through [TG-FCT-7]). Filter field names use the dotted form from [TG-FCT-3] / [TG-FCT-4]. Filter values are either bare scalars (interpreted as `eq`) or operator objects (`{ eq | in | range | prefix | contains | containsAny }`). Per [TG-FCT-7] pagination is cursor-based; offset-based pagination MUST NOT be used. See `### Search REST binding` in the verana-graph spec.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["surface"],
+  "properties": {
+    "surface": {
+      "$ref": "#/$defs/SearchSurface",
+      "description": "Searchable result surface per [TG-FCT-1]. Exactly one surface per request."
+    },
+    "filters": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/FilterValue" },
+      "description": "Structured filters keyed by dotted field names from [TG-FCT-3] (e.g. `Did.operatorKind`, `OrganizationCredential.legalJurisdiction`, `Participant.role`). Each value MUST validate against `#/$defs/FilterValue`. Free-form because field names span multiple ECS schemas; per-surface field-name validity is documented in the spec, not enforced by this schema."
+    },
+    "freeText": {
+      "type": "string",
+      "description": "Free-form lexical query string. Scored against the fields enumerated in [TG-FCT-4]."
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200,
+      "default": 20,
+      "description": "Maximum number of hits to return on this page."
+    },
+    "cursor": {
+      "type": ["string", "null"],
+      "description": "Opaque pagination cursor from a previous response per [TG-FCT-7]. Omit (or set `null`) for the first page."
+    },
+    "includeUntrusted": {
+      "type": "boolean",
+      "default": false,
+      "description": "Override the [TG-FCT-2] default `Did.trusted = true` gate. Has no effect on non-`Did` surfaces. The `Did.expiresAtTime` (null OR `>= now`) and trust-expired-controller gates of [TG-FCT-2] are NOT overridable, regardless of this flag."
+    },
+    "includeArchived": {
+      "type": "boolean",
+      "default": false,
+      "description": "Override the [TG-FCT-2] default `archived = false` gate on `Ecosystem` and `CredentialSchema` surfaces. Has no effect on other surfaces."
+    }
+  },
+  "$defs": {
+    "SearchSurface": {
+      "enum": ["Did", "Ecosystem", "Corporation", "CredentialSchema", "ServiceEndpoint"]
+    },
+    "Scalar": {
+      "description": "anyOf, not oneOf: a JSON integer matches both `number` and `integer`, so a oneOf over both branches rejects every integer.",
+      "anyOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" }
+      ]
+    },
+    "FilterValue": {
+      "description": "A bare scalar (interpreted as `eq`) or an operator object. Operators map to the [TG-FCT-3] operator column; not every operator applies to every field \u2014 spec text governs which operators are valid per field.",
+      "oneOf": [
+        { "$ref": "#/$defs/Scalar" },
+        { "type": "array", "items": { "$ref": "#/$defs/Scalar" }, "description": "Sugar for `{ in: [...] }`." },
+        { "$ref": "#/$defs/FilterOperators" }
+      ]
+    },
+    "FilterOperators": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "eq": { "$ref": "#/$defs/Scalar", "description": "Exact match." },
+        "in": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/Scalar" },
+          "description": "Match any of the listed values."
+        },
+        "range": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "description": "Numeric / temporal range. At least one bound MUST be provided.",
+          "properties": {
+            "gt": { "type": ["number", "string"] },
+            "gte": { "type": ["number", "string"] },
+            "lt": { "type": ["number", "string"] },
+            "lte": { "type": ["number", "string"] }
+          }
+        },
+        "prefix": { "type": "string", "description": "String prefix match (e.g. `legalJurisdiction.prefix = \"CO-DC\"`)." },
+        "contains": { "$ref": "#/$defs/Scalar", "description": "Set / array containment of a single value." },
+        "containsAny": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/Scalar" },
+          "description": "Set / array containment of any value in the list."
+        }
+      }
+    }
+  }
+}
