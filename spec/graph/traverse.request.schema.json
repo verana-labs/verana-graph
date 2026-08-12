@@ -11,7 +11,9 @@
     "input": {
       "type": "object",
       "description": "Per-query input shape; constrained by the discriminated `allOf` branch matching `query`."
-    }
+    },
+    "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Page size for the paginated queries of [TG-QRY-6] (A4\u2013A7, C1\u2013C2, D1\u2013D2, E1\u2013E2). Ignored by shape-fixed queries." },
+    "cursor": { "type": "string", "description": "Opaque keyset cursor from a previous response's `nextCursor`, per [TG-QRY-6] / [TG-FCT-7]. Malformed or query-mismatched cursors yield the INVALID_CURSOR error of [TG-ERR-1]." }
   },
   "allOf": [
     { "if": { "properties": { "query": { "const": "A1" } } }, "then": { "properties": { "input": { "$ref": "#/$defs/DidInput" } } } },
@@ -89,11 +91,12 @@
     "CredentialIdInput": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["credentialId"],
+      "required": ["did", "credentialId"],
       "properties": {
+        "did": { "$ref": "#/$defs/DidString", "description": "The credential's subject/holder DID. `EcsCredential` records are keyed `(subjectDid, id)`; a `Vtc` is matched by `credentialId` among the VTCs presented by this DID." },
         "credentialId": {
           "type": "string",
-          "description": "Identity of the credential record \u2014 either an `EcsCredential.id` or a `Vtc.id`. The graph dispatches on the actual record type internally."
+          "description": "The credential `id` \u2014 either an `EcsCredential.id` or a `Vtc.id`. The graph dispatches on the actual record type internally."
         }
       }
     },

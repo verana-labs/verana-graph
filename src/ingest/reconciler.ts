@@ -270,6 +270,8 @@ async function upsertEcsCredentials(trx: Knex, r: ResolveResponse, e: Evidence):
         ecosystem_id: c.ecosystemId,
         participant_id: c.participantId,
         subject_did: c.credentialSubject.id,
+        digest_jcs: c.digestJCS ?? null,
+        issued_at_time: c.issuedAtTime ?? null,
         valid_from: c.validFrom,
         valid_until: c.validUntil,
         credential_subject: JSON.stringify(c.credentialSubject),

@@ -11,7 +11,8 @@
     "evaluatedAtTime": { "$ref": "#/$defs/Iso8601DateTime", "description": "Wall-clock evaluation time of the response. Per [[TG-QRY-1]] the graph evaluates against its current persisted state; this timestamp is the moment the call was answered." },
     "output": {
       "description": "Per-query output shape; constrained by the discriminated `allOf` branch matching `query`."
-    }
+    },
+    "nextCursor": { "type": ["string", "null"], "description": "Keyset continuation cursor per [TG-QRY-6]; `null` on the last page and for non-paginated (shape-fixed) queries." }
   },
   "allOf": [
     { "if": { "properties": { "query": { "const": "A1" } } }, "then": { "properties": { "output": { "$ref": "#/$defs/A1Output" } } } },
@@ -64,8 +65,8 @@
       "pattern": "^did:"
     },
     "Pattern": {
-      "enum": ["A", "B"],
-      "description": "Architecture pattern per VS-REQ-3 / VS-REQ-4 (A: self-issued; B: delegated)."
+      "enum": ["A", "B", null],
+      "description": "Architecture pattern per VS-REQ-3 / VS-REQ-4 (A: self-issued; B: delegated); null when the DID presents no ServiceCredential (untrusted DID)."
     },
     "ParticipantState": {
       "enum": ["ACTIVE", "FUTURE", "INACTIVE", "EXPIRED", "REVOKED", "SLASHED", "REPAID"]
@@ -128,15 +129,16 @@
         "isTrustExpired": { "type": "boolean" },
         "pattern": { "$ref": "#/$defs/Pattern" },
         "trusted": { "type": "boolean" },
-        "corporationId": { "type": ["integer", "null"], "minimum": 0, "description": "Stable `uint64` id of the Corporation that owns this DID (mirrors VPR `Corporation.id`). `null` while no Corporation has adopted the DID." }
+        "corporationId": { "type": "integer", "minimum": 0, "description": "Stable `uint64` id of the DID's owner Corporation per the VPR DID ownership invariant. Never null." }
       }
     },
     "CorporationRef": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "lastObservedAtTime"],
+      "required": ["id", "did", "lastObservedAtTime"],
       "properties": {
         "id": { "type": "integer", "minimum": 0, "description": "Stable `uint64` primary key of the Corporation (mirrors VPR `Corporation.id`)." },
+        "did": { "$ref": "#/$defs/DidString", "description": "The Corporation's own declared DID (mirrors VPR `Corporation.did`). Identity only — the DID's trust state lives on the `Did` node (A1 / referential lookup)." },
         "policyAddress": { "$ref": "#/$defs/Bech32Address", "description": "On-chain account that signs on behalf of this Corporation (mirrors VPR `Corporation.policy_address`). Globally unique across all Corporation entries. MAY be backed by any signing primitive (single key, multisig, Cosmos SDK group policy, …)." },
         "lastObservedAtTime": { "$ref": "#/$defs/Iso8601DateTime" },
         "deposit": { "$ref": "#/$defs/Coin" },
@@ -149,9 +151,10 @@
     "EcosystemRef": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "corporationId", "archived", "lastObservedAtTime"],
+      "required": ["id", "did", "corporationId", "archived", "lastObservedAtTime"],
       "properties": {
         "id": { "type": "integer", "minimum": 0 },
+        "did": { "$ref": "#/$defs/DidString", "description": "The Ecosystem's DID (mirrors VPR `Ecosystem.did`). Per VPR, several Ecosystem entries MAY share one DID — the primary key remains `id`. Identity only; trust state lives on the `Did` node." },
         "corporationId": { "type": "integer", "minimum": 0, "description": "Stable `uint64` id of the Corporation that controls this Ecosystem (mirrors VPR `Ecosystem.corporation_id`)." },
         "archived": { "type": "boolean" },
         "lastObservedAtTime": { "$ref": "#/$defs/Iso8601DateTime" },
@@ -178,10 +181,11 @@
     "ParticipantRef": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "role", "state", "credentialSchemaId", "ecosystemId", "validatorParticipantId", "lastObservedAtTime"],
-      "description": "Minimal Participant reference. Per [[TG-ACT-1]] only `state = ACTIVE` records are persisted; non-ACTIVE values MUST NOT appear here. `validatorParticipantId` anchors the `VALIDATED_BY: Participant → Participant` edge (the parent node in the permission tree); it is `null` if and only if `role = ECOSYSTEM` (the chain root, per [[TG-EDGE-4]]).",
+      "required": ["id", "didId", "role", "state", "credentialSchemaId", "ecosystemId", "validatorParticipantId", "lastObservedAtTime"],
+      "description": "Minimal Participant reference. `state` carries the current lifecycle state; non-`ACTIVE` records are retained while referenced per [[TG-ACT-1]] and are returned by traversal with their state. `validatorParticipantId` anchors the `VALIDATED_BY: Participant → Participant` edge (the parent node in the permission tree); it is `null` if and only if `role = ECOSYSTEM` (the chain root, per [[TG-EDGE-4]]).",
       "properties": {
         "id": { "type": "integer", "minimum": 0 },
+        "didId": { "$ref": "#/$defs/DidString", "description": "The DID this Participant entry refers to (envelope-derived at ingestion). Identity only; trust state lives on the `Did` node." },
         "vsOperator": { "anyOf": [{ "$ref": "#/$defs/Bech32Address" }, { "type": "null" }], "description": "`null` until a VS Operator Authorization has been granted for this entry." },
         "role": { "$ref": "#/$defs/ParticipantRole" },
         "state": { "$ref": "#/$defs/ParticipantState" },
@@ -197,7 +201,7 @@
     "EcsCredentialRef": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["ecsSchema", "ecsSchemaVersion", "credentialSchemaId", "issuerParticipantId", "ecosystemId", "participantId", "validFrom", "validUntil", "credentialSubject", "lastObservedAtTime"],
+      "required": ["ecsSchema", "ecsSchemaVersion", "credentialSchemaId", "issuerParticipantId", "ecosystemId", "participantId", "subjectDid", "id", "digestJCS", "issuedAtTime", "validFrom", "validUntil", "credentialSubject", "lastObservedAtTime"],
       "properties": {
         "ecsSchema": { "$ref": "#/$defs/EcsSchemaName" },
         "ecsSchemaVersion": { "type": "string" },
@@ -205,7 +209,10 @@
         "issuerParticipantId": { "type": "integer", "minimum": 0 },
         "ecosystemId": { "type": "integer", "minimum": 0 },
         "participantId": { "type": "integer", "minimum": 0 },
-        "id": { "type": "string" },
+        "subjectDid": { "$ref": "#/$defs/DidString", "description": "The credential's subject/holder DID — part of the `(subjectDid, id)` record key." },
+        "id": { "type": "string", "description": "The credential `id` — part of the `(subjectDid, id)` record key." },
+        "digestJCS": { "type": "string", "description": "Informational: the credential's JCS digest, recomputed and ledger-verified by the indexer per [IDX-VT-EVAL-1]." },
+        "issuedAtTime": { "$ref": "#/$defs/Iso8601DateTime", "description": "Effective issuance time: the `created` timestamp of the credential's ledger Digest entry." },
         "validFrom": { "$ref": "#/$defs/Iso8601DateTime" },
         "validUntil": { "anyOf": [{ "$ref": "#/$defs/Iso8601DateTime" }, { "type": "null" }], "description": "`null` for open-ended credentials, per the entity table (`timestamp | null`)." },
         "credentialSubject": { "type": "object", "description": "ECS-schema-specific subject claims; always includes `id`." },
@@ -273,7 +280,7 @@
         "expiresAtTime": { "oneOf": [{ "$ref": "#/$defs/Iso8601DateTime" }, { "type": "null" }], "description": "Earliest trust-flipping boundary per [IDX-VT-EVAL-2]; `null` when no boundary exists (never trust-expires until an upstream re-evaluation)." },
         "pattern": { "$ref": "#/$defs/Pattern" },
         "isTrustExpired": { "type": "boolean" },
-        "corporationId": { "type": ["integer", "null"], "minimum": 0, "description": "Stable `uint64` id of the Corporation that owns this DID (mirrors VPR `Corporation.id`). `null` while no Corporation has adopted the DID." },
+        "corporationId": { "type": "integer", "minimum": 0, "description": "Stable `uint64` id of the DID's owner Corporation per the VPR DID ownership invariant. Never null." },
         "lastObservedAtTime": { "$ref": "#/$defs/Iso8601DateTime" }
       }
     },
@@ -283,7 +290,7 @@
       "required": ["corporation", "ecosystems"],
       "description": "A2 \u2014 Governing chain. Owning Corporation and the deduplicated set of Ecosystems whose schemas the DID participates in.",
       "properties": {
-        "corporation": { "anyOf": [{ "$ref": "#/$defs/CorporationRef" }, { "type": "null" }], "description": "`null` when `Did.corporationId` is `null` (no Corporation has adopted the DID)." },
+        "corporation": { "$ref": "#/$defs/CorporationRef" },
         "ecosystems": { "type": "array", "items": { "$ref": "#/$defs/EcosystemRef" } }
       }
     },

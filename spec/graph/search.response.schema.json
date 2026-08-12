@@ -101,17 +101,18 @@
         "lastObservedAtTime": { "$ref": "#/$defs/Iso8601DateTime" },
         "isTrustExpired": { "type": "boolean" },
         "trusted": { "type": "boolean" },
-        "pattern": { "enum": ["A", "B"] },
+        "pattern": { "enum": ["A", "B", null] },
         "operatorKind": { "enum": ["Organization", "Persona"] },
-        "corporationId": { "type": ["integer", "null"], "minimum": 0, "description": "Stable `uint64` id of the Corporation that owns this DID (mirrors VPR `Corporation.id`). `null` while no Corporation has adopted the DID." }
+        "corporationId": { "type": "integer", "minimum": 0, "description": "Stable `uint64` id of the DID's owner Corporation per the VPR DID ownership invariant. Never null." }
       }
     },
     "EcosystemSnippet": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["id", "archived", "lastObservedAtTime"],
+      "required": ["id", "did", "archived", "lastObservedAtTime"],
       "properties": {
         "id": { "type": "integer", "minimum": 0 },
+        "did": { "$ref": "#/$defs/DidString", "description": "The Ecosystem's DID (mirrors VPR `Ecosystem.did`; MAY be shared across Ecosystem entries — the key remains `id`)." },
         "archived": { "type": "boolean" },
         "corporationId": { "type": "integer", "minimum": 0, "description": "Stable `uint64` id of the controlling Corporation (mirrors VPR `Ecosystem.corporation_id`)." },
         "lastObservedAtTime": { "$ref": "#/$defs/Iso8601DateTime" }
@@ -120,9 +121,10 @@
     "CorporationSnippet": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["id", "lastObservedAtTime"],
+      "required": ["id", "did", "lastObservedAtTime"],
       "properties": {
         "id": { "type": "integer", "minimum": 0, "description": "Stable `uint64` primary key of the Corporation (mirrors VPR `Corporation.id`)." },
+        "did": { "$ref": "#/$defs/DidString", "description": "The Corporation's own declared DID (mirrors VPR `Corporation.did`)." },
         "policyAddress": { "$ref": "#/$defs/Bech32Address", "description": "On-chain account that signs on behalf of this Corporation (mirrors VPR `Corporation.policy_address`)." },
         "deposit": { "type": "string" },
         "slashedEvents": { "type": "integer", "minimum": 0 },

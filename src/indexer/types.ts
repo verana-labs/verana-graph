@@ -52,6 +52,8 @@ export type EcsSchemaName =
 
 export interface EcsCredentialEntry {
   id?: string
+  digestJCS?: string
+  issuedAtTime?: string
   ecsSchema: EcsSchemaName
   ecsSchemaVersion: string
   credentialSchemaId: number
