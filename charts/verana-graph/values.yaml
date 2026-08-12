@@ -1,0 +1,73 @@
+replicaCount: 1
+
+image:
+  repository: veranalabs/verana-graph
+  pullPolicy: IfNotPresent
+  # Overrides the image tag (defaults to the chart appVersion when empty).
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+# Extra environment variables injected into the container, merged after the
+# values below. Use for anything not covered by `config`.
+env: []
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 3100
+
+# Application configuration, see .env.example for the full surface.
+config:
+  logLevel: info
+  indexerBaseUrl: http://idx:3001
+  indexerWsUrl: ""
+  fetchGfDocBodies: "false"
+  fetchVpBodies: "false"
+  gateServiceEndpoints: "false"
+  gapCoalesceThreshold: "1000"
+  bpsMaxBufferedBytes: "1048576"
+  trustRefreshIntervalMs: "300000"
+  trustRefreshBatch: "200"
+  nodeOptions: "--max-old-space-size=1536"
+
+database:
+  host: postgres
+  port: 5432
+  user: verana_graph
+  db: verana_graph
+  # The password is always read from an existing Kubernetes Secret.
+  # Example:
+  #   pwdSecret:
+  #     name: my-db-secret
+  #     key: password
+  pwdSecret: {}
+  # urlSecret: supply the whole connection string from a Secret instead, which
+  # takes precedence over the fields above.
+  urlSecret: {}
+
+ingress:
+  enabled: false
+  className: nginx
+  host: ""
+  tlsSecret: ""
+  annotations: {}
+  # The block-progress stream is a long-lived WebSocket, so the proxy read
+  # timeout must outlast a quiet chain.
+  websocketTimeoutSeconds: 3600
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

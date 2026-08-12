@@ -2,10 +2,10 @@ name: Continuous Integration
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'v[0-9]*']
     types: [opened, synchronize, reopened, labeled]
   push:
-    branches: [main]
+    branches: [main, 'v[0-9]*']
   workflow_dispatch:
 
 concurrency:
@@ -14,9 +14,9 @@ concurrency:
 
 jobs:
   ci:
-    uses: 2060-io/organization/.github/workflows/2060-linter-call.yml@41008f619521ec154b02a7065ad332fad445a2fd # v0.5.1
+    uses: 2060-io/organization/.github/workflows/2060-linter-call.yml@562f890be78c7fd3f07695446f4506d383c52219 # v0.5.2
     with:
-      enable-charts-lint: false
+      enable-charts-lint: true
 
   db-tests:
     runs-on: ubuntu-latest
