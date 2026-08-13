@@ -190,7 +190,7 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex, config: Conf
     const req = request.body as SearchRequest
     if (!validate(req)) {
       const detail = (validate.errors ?? []).map(e => `${e.instancePath || '/'} ${e.message}`).join('; ')
-      throw new ApiError('INVALID_REQUEST', `request does not match search schema: ${detail}`)
+      throw new ApiError('INVALID_INPUT', `request does not match search schema: ${detail}`)
     }
     const def = SURFACES[req.surface]
     const limit = req.limit ?? 20
@@ -208,7 +208,7 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex, config: Conf
         const norm = normalizeFilterValue(field, raw)
         if (!spec.ops.includes(norm.op)) {
           throw new ApiError(
-            'UNSUPPORTED_OPERATOR',
+            'INVALID_INPUT',
             `operator ${norm.op} is not supported on ${field} (allowed: ${spec.ops.join(', ')})`,
           )
         }

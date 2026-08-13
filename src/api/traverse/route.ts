@@ -44,12 +44,16 @@ export function registerTraverseRoute(app: FastifyInstance, db: Knex): void {
   // TG-QRY-5: the single REST binding endpoint, dispatching on the query selector
   app.post('/v4/graph/traverse', async (request, reply) => {
     const body = request.body as { query?: string; input?: unknown }
+    // selector first: the schema enumerates it, so validating first would mask UNKNOWN_QUERY
+    if (typeof body?.query === 'string' && !HANDLERS[body.query]) {
+      throw new ApiError('UNKNOWN_QUERY', `unknown query ${body.query}`)
+    }
     if (!validate(body)) {
       const detail = (validate.errors ?? []).map(e => `${e.instancePath || '/'} ${e.message}`).join('; ')
-      throw new ApiError('INVALID_REQUEST', `request does not match traverse schema: ${detail}`)
+      throw new ApiError('INVALID_INPUT', `request does not match traverse schema: ${detail}`)
     }
     const handler = HANDLERS[body.query as string]
-    if (!handler) throw new ApiError('INVALID_REQUEST', `unknown query ${body.query}`)
+    if (!handler) throw new ApiError('UNKNOWN_QUERY', `unknown query ${body.query}`)
     const output = await handler(db, body.input as never)
     return reply.send({
       query: body.query,

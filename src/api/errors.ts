@@ -1,10 +1,10 @@
-// spec defines no error contract (verana-spec issue filed); this shape is our documented extension
+// TG-ERR-1: closed code set, HTTP status fixed per code
 export type ErrorCode =
-  | 'INVALID_REQUEST'
-  | 'INVALID_CURSOR'
-  | 'NOT_FOUND'
+  | 'INVALID_INPUT'
+  | 'UNKNOWN_QUERY'
   | 'UNKNOWN_FILTER_FIELD'
-  | 'UNSUPPORTED_OPERATOR'
+  | 'INVALID_CURSOR'
+  | 'UNKNOWN_ID'
 
 export class ApiError extends Error {
   constructor(
@@ -15,15 +15,7 @@ export class ApiError extends Error {
   }
 
   get httpStatus(): number {
-    switch (this.code) {
-      case 'NOT_FOUND':
-        return 404
-      case 'UNKNOWN_FILTER_FIELD':
-      case 'UNSUPPORTED_OPERATOR':
-        return 422
-      default:
-        return 400
-    }
+    return this.code === 'UNKNOWN_ID' ? 404 : 400
   }
 
   toBody(): { error: { code: ErrorCode; message: string } } {
