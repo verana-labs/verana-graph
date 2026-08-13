@@ -4,9 +4,12 @@ import addFormats from 'ajv-formats'
 import { FastifyInstance } from 'fastify'
 import { Knex } from 'knex'
 import { ApiError } from '../errors'
+import { decodeKey, type PageReq, pageHash, resolveLimit } from './cursor'
 import * as q from './queries'
 
-type Handler = (db: Knex, input: never) => Promise<unknown>
+type Handler = (db: Knex, input: never, page: PageReq) => Promise<unknown>
+
+const PAGINATED = new Set(['A4', 'A5', 'A6', 'A7', 'C1', 'C2', 'D1', 'D2', 'E1', 'E2'])
 
 const HANDLERS: Record<string, Handler> = {
   A1: q.a1,
@@ -43,8 +46,7 @@ export function registerTraverseRoute(app: FastifyInstance, db: Knex): void {
 
   // TG-QRY-5: the single REST binding endpoint, dispatching on the query selector
   app.post('/v4/graph/traverse', async (request, reply) => {
-    const body = request.body as { query?: string; input?: unknown }
-    // selector first: the schema enumerates it, so validating first would mask UNKNOWN_QUERY
+    const body = request.body as { query?: string; input?: unknown; limit?: unknown; cursor?: string }
     if (typeof body?.query === 'string' && !HANDLERS[body.query]) {
       throw new ApiError('UNKNOWN_QUERY', `unknown query ${body.query}`)
     }
@@ -54,11 +56,23 @@ export function registerTraverseRoute(app: FastifyInstance, db: Knex): void {
     }
     const handler = HANDLERS[body.query as string]
     if (!handler) throw new ApiError('UNKNOWN_QUERY', `unknown query ${body.query}`)
-    const output = await handler(db, body.input as never)
+    const query = body.query as string
+    const paginated = PAGINATED.has(query)
+    const hash = pageHash(query, body.input)
+    const page: PageReq = {
+      limit: resolveLimit(body.limit),
+      after: paginated ? decodeKey(body.cursor, hash) : null,
+      hash,
+    }
+    const result = await handler(db, body.input as never, page)
+    const { output, nextCursor } = paginated
+      ? (result as { output: unknown; nextCursor: string | null })
+      : { output: result, nextCursor: null }
     return reply.send({
-      query: body.query,
+      query,
       evaluatedAtTime: new Date().toISOString(),
       output,
+      nextCursor,
     })
   })
 }
