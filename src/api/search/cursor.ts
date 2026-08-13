@@ -7,7 +7,7 @@ export interface CursorPayload {
   h: string
 }
 
-function stableStringify(v: unknown): string {
+export function stableStringify(v: unknown): string {
   if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`
   if (v && typeof v === 'object') {
     const entries = Object.entries(v as Record<string, unknown>)
@@ -30,12 +30,16 @@ export function encodeCursor(score: number, key: string, hash: string): string {
 }
 
 export function decodeCursor(cursor: string, expectedHash: string): CursorPayload {
-  let payload: CursorPayload
+  let parsed: unknown
   try {
-    payload = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
+    parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
   } catch {
     throw new ApiError('INVALID_CURSOR', 'cursor is not decodable')
   }
+  if (!parsed || typeof parsed !== 'object') {
+    throw new ApiError('INVALID_CURSOR', 'cursor is not decodable')
+  }
+  const payload = parsed as CursorPayload
   if (typeof payload.s !== 'number' || typeof payload.k !== 'string' || payload.h !== expectedHash) {
     throw new ApiError('INVALID_CURSOR', 'cursor does not belong to this query')
   }
