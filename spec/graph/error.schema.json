@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://verana.io/schemas/v4/graph/error.schema.json",
+  "title": "GraphErrorResponse",
+  "description": "Shared error envelope for the Verana Graph traversal and faceted-search APIs, per [TG-ERR-1]. Every non-2xx response of either API MUST validate against this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["error"],
+  "properties": {
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "enum": ["INVALID_INPUT", "UNKNOWN_QUERY", "UNKNOWN_FILTER_FIELD", "INVALID_CURSOR", "UNKNOWN_ID"],
+          "description": "Machine-readable error class per [TG-ERR-1] — the only field programmatic consumers need."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable detail. Implementation-defined wording; MUST NOT be required for programmatic dispatch."
+        }
+      }
+    }
+  }
+}

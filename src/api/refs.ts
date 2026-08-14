@@ -42,6 +42,7 @@ export function didRef(row: DidRow) {
 
 export function corporationRef(row: {
   id: number
+  did: string
   policy_address: string | null
   deposit: string | null
   last_slashed_at_time: Date | null
@@ -52,6 +53,7 @@ export function corporationRef(row: {
 }) {
   return strip({
     id: row.id,
+    did: row.did,
     lastObservedAtTime: iso(row.last_observed_at_time),
     policyAddress: row.policy_address ?? undefined,
     deposit: row.deposit ?? undefined,
@@ -64,6 +66,7 @@ export function corporationRef(row: {
 
 export function ecosystemRef(row: {
   id: number
+  did: string
   corporation_id: number
   archived: boolean
   issued_credentials: number | null
@@ -73,6 +76,7 @@ export function ecosystemRef(row: {
 }) {
   return strip({
     id: row.id,
+    did: row.did,
     corporationId: row.corporation_id,
     archived: row.archived,
     lastObservedAtTime: iso(row.last_observed_at_time),
@@ -121,6 +125,7 @@ export interface ParticipantRow {
 export function participantRef(row: ParticipantRow) {
   return strip({
     id: row.id,
+    didId: row.did_id,
     role: row.role,
     state: 'ACTIVE',
     credentialSchemaId: row.credential_schema_id,
@@ -147,6 +152,8 @@ export interface EcsCredentialRow {
   valid_from: Date
   valid_until: Date | null
   credential_subject: Record<string, unknown>
+  digest_jcs: string | null
+  issued_at_time: Date | null
   last_observed_at_time: Date
 }
 
@@ -160,6 +167,9 @@ export function ecsCredentialRef(row: EcsCredentialRow) {
     issuerParticipantId: row.issuer_participant_id,
     ecosystemId: row.ecosystem_id,
     participantId: row.participant_id,
+    subjectDid: row.subject_did,
+    digestJCS: row.digest_jcs,
+    issuedAtTime: isoOrNull(row.issued_at_time),
     validFrom: iso(row.valid_from),
     validUntil: isoOrNull(row.valid_until),
     credentialSubject: row.credential_subject,

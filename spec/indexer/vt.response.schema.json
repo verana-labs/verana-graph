@@ -39,7 +39,7 @@
     "corporationId": {
       "type": "integer",
       "minimum": 0,
-      "description": "Stable `uint64` id of the Corporation that owns this DID — the unique Corporation whose `did` equals the resolved DID, well-defined by VPR's per-Corporation `did` uniqueness invariant (at most one Corporation has any given DID). Always surfaced as part of the trust-core fields (not gated by any selector). Equals `corporation.id` whenever the `corporation` object is included."
+      "description": "Stable `uint64` id of the resolved DID's owner Corporation per the VPR DID ownership invariant. Total over the indexed DID universe — MUST NOT be null. Always surfaced (not gated by any selector). Equals `corporation.id` whenever the `corporation` object is included."
     },
 
     "corporation":     { "$ref": "#/$defs/Corporation", "description": "The Corporation the DID *represents* (whose `did` equals the resolved DID). Singular per VPR's per-Corporation `did` uniqueness invariant. The Corporation's `did` is not repeated on the object (it is the envelope's resolved `did`). Omitted when the resolved DID is not the `did` of any Corporation." },
@@ -150,6 +150,9 @@
         "issuerParticipantId",
         "ecosystemId",
         "participantId",
+        "id",
+        "digestJCS",
+        "issuedAtTime",
         "validFrom",
         "validUntil",
         "credentialSubject"
@@ -170,7 +173,9 @@
         "issuerParticipantId": { "type": "integer", "minimum": 0, "description": "Stable VPR id of the ISSUER `Participant` entry that issued this credential (role = ISSUER, credentialSchemaId = this credential's credentialSchemaId, did = issuer DID). Anchors the `ISSUED_BY: EcsCredential → Participant` edge by stable id; the issuer's DID is recoverable as `Participant.did` of that entry." },
         "ecosystemId":      { "type": "integer", "minimum": 0, "description": "Stable VPR ledger id of the issuing ecosystem. Anchors the `GOVERNED_BY: EcsCredential → Ecosystem` edge. The VC body's `ecosystem` DID claim is not surfaced inline (the stable id is sufficient for graph linking; consumers needing the original DID claim can fetch the VC body via the VP)." },
         "participantId":    { "type": "integer", "minimum": 0, "description": "Stable VPR id of the HOLDER `Participant` entry that tracks this credential's lifecycle (issuance, validity, revocation, expiration). Anchors the `HELD_AS: EcsCredential → Participant` edge so consumers can resolve the participation directly without joining on (holder DID, credentialSchemaId, role=HOLDER)." },
-        "id":               { "type": "string" },
+        "id":               { "type": "string", "description": "The credential's `id` — a mandatory attribute of every W3C VTC per the Verifiable Trust spec. Unique within one response; the graph keys `EcsCredential` records by `(subjectDid, id)`." },
+        "digestJCS":        { "type": "string", "description": "Informational: the credential's JCS digest, recomputed and ledger-verified by the evaluation per [IDX-VT-EVAL-1]." },
+        "issuedAtTime":     { "$ref": "#/$defs/Iso8601DateTime", "description": "Effective issuance time: the `created` timestamp of the credential's ledger `Digest` entry, per [IDX-VT-EVAL-1]." },
         "validFrom":        { "$ref": "#/$defs/Iso8601DateTime", "description": "Start of the credential's validity window (mirrors the VC body's `validFrom`)." },
         "validUntil":       { "$ref": "#/$defs/Iso8601DateTime", "description": "End of the credential's validity window (mirrors the VC body's `validUntil`)." },
         "credentialSubject": {

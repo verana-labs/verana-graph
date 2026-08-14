@@ -186,9 +186,10 @@ export async function a7(db: Knex, input: { did: string; role?: string }): Promi
 
 async function findCredential(
   db: Knex,
+  did: string,
   credentialId: string,
 ): Promise<{ kind: 'ecs'; row: EcsCredentialRow } | { kind: 'vtc'; row: VtcRow }> {
-  const ecs = await validEcs(db('ecs_credentials').where('id', credentialId)).first<
+  const ecs = await validEcs(db('ecs_credentials').where({ subject_did: did, id: credentialId })).first<
     EcsCredentialRow | undefined
   >()
   if (ecs) return { kind: 'ecs', row: ecs }
@@ -198,8 +199,8 @@ async function findCredential(
 }
 
 // B1 - issuer recovery
-export async function b1(db: Knex, input: { credentialId: string }): Promise<Json> {
-  const found = await findCredential(db, input.credentialId)
+export async function b1(db: Knex, input: { did: string; credentialId: string }): Promise<Json> {
+  const found = await findCredential(db, input.did, input.credentialId)
   const issuer = await db('participants')
     .where('id', found.row.issuer_participant_id)
     .first<ParticipantRow | undefined>()
@@ -220,8 +221,8 @@ export async function b1(db: Knex, input: { credentialId: string }): Promise<Jso
 }
 
 // B2 - holder recovery
-export async function b2(db: Knex, input: { credentialId: string }): Promise<Json> {
-  const found = await findCredential(db, input.credentialId)
+export async function b2(db: Knex, input: { did: string; credentialId: string }): Promise<Json> {
+  const found = await findCredential(db, input.did, input.credentialId)
   const holder = await db('participants')
     .where('id', found.row.participant_id)
     .first<ParticipantRow | undefined>()

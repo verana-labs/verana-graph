@@ -88,6 +88,7 @@ const SURFACES: Record<Surface, SurfaceDef> = {
     snippet: r =>
       strip({
         id: r.id,
+        did: r.did,
         archived: r.archived,
         lastObservedAtTime: iso(r.last_observed_at_time),
         corporationId: r.corporation_id,
@@ -113,6 +114,7 @@ const SURFACES: Record<Surface, SurfaceDef> = {
     snippet: r =>
       strip({
         id: r.id,
+        did: r.did,
         lastObservedAtTime: iso(r.last_observed_at_time),
         policyAddress: r.policy_address ?? undefined,
         deposit: r.deposit ?? undefined,

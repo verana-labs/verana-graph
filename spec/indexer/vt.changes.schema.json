@@ -6,6 +6,7 @@
 
   "oneOf": [
     { "$ref": "#/$defs/ReadyMessage" },
+    { "$ref": "#/$defs/SubscribedMessage" },
     { "$ref": "#/$defs/BlockMessage" },
     { "$ref": "#/$defs/ListChangesResponse" }
   ],
@@ -51,6 +52,16 @@
       }
     },
 
+    "SubscribedMessage": {
+      "type": "object",
+      "description": "Acknowledges a processed `subscribe`. `block` is the height of the next block this subscription will deliver.",
+      "required": ["type", "block"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "subscribed" },
+        "block": { "type": "integer", "minimum": 0 }
+      }
+    },
     "BlockMessage": {
       "type": "object",
       "additionalProperties": false,
@@ -144,7 +155,7 @@
         "evaluatedAtTime":  { "$ref": "#/$defs/Iso8601DateTime" },
         "evaluatedAtBlock": { "type": "integer", "minimum": 0 },
         "expiresAtTime":    { "oneOf": [{ "$ref": "#/$defs/Iso8601DateTime" }, { "type": "null" }], "description": "Earliest trust-flipping boundary per [IDX-VT-EVAL-2]; `null` when no boundary exists. NOT a TTL." },
-        "corporationId":    { "type": "integer", "minimum": 0, "description": "Stable `uint64` id of the Corporation that owns the resolved DID (the unique Corporation whose `did` equals the resolved DID, per VPR's per-Corporation `did` uniqueness invariant)." }
+        "corporationId":    { "type": "integer", "minimum": 0, "description": "Stable `uint64` id of the resolved DID's owner Corporation per the VPR DID ownership invariant. Never null." }
       }
     }
   }
