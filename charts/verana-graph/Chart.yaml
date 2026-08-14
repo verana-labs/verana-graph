@@ -1,5 +1,5 @@
 apiVersion: v2
-name: verana-graph
+name: verana-graph-chart
 description: Helm chart for the Verana Graph discovery service
 type: application
 # version / appVersion are overwritten at publish time by the CD pipeline
