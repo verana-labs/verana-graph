@@ -19,11 +19,29 @@ existing Kubernetes Secret referenced by `database.pwdSecret` (required) — nev
 
 ## Install
 
-```bash
-helm install graph ./charts/verana-graph --namespace verana --create-namespace \
-  --set database.pwdSecret.name=graph-db --set database.pwdSecret.key=password
+### Self-contained — the chart brings its own Postgres (default)
 
-# external Postgres (e.g. on the indexer's server)
+The password Secret both **seeds** the embedded Postgres and is what the app connects with, so
+create it first, then install:
+
+```bash
+kubectl create namespace verana
+
+# the value initialises the embedded Postgres on first boot
+kubectl -n verana create secret generic graph-db \
+  --from-literal=password="$(openssl rand -base64 24)"
+
+helm install graph ./charts/verana-graph --namespace verana \
+  --set database.pwdSecret.name=graph-db \
+  --set database.pwdSecret.key=password
+  # --set database.storage.storageClassName=<class>   # if your cluster has no default StorageClass
+```
+
+That's it — the graph and its PostgreSQL come up in one pod, the volume persists across upgrades.
+
+### External Postgres (e.g. a `verana_graph` database on the indexer's server)
+
+```bash
 helm install graph ./charts/verana-graph --namespace verana --create-namespace \
   --set database.enabled=false --set database.host=idx \
   --set database.pwdSecret.name=verana-secrets --set database.pwdSecret.key=INDEXER_POSTGRES_PWD
