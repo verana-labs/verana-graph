@@ -1,0 +1,8 @@
+apiVersion: v2
+name: verana-graph
+description: Helm chart for the Verana Graph discovery service
+type: application
+# version / appVersion are overwritten at publish time by the CD pipeline
+# (helm package --version --app-version). These are just sane defaults.
+version: 0.1.0
+appVersion: "0.1.0"

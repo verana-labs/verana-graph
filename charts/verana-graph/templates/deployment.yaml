@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "verana-graph.fullname" . }}
+  labels:
+    {{- include "verana-graph.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "verana-graph.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "verana-graph.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: NODE_OPTIONS
+              value: {{ .Values.config.nodeOptions | quote }}
+            - name: PORT
+              value: {{ .Values.service.port | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: INDEXER_BASE_URL
+              value: {{ .Values.config.indexerBaseUrl | quote }}
+            - name: INDEXER_WS_URL
+              value: {{ .Values.config.indexerWsUrl | quote }}
+            - name: FETCH_GF_DOC_BODIES
+              value: {{ .Values.config.fetchGfDocBodies | quote }}
+            - name: FETCH_VP_BODIES
+              value: {{ .Values.config.fetchVpBodies | quote }}
+            - name: GATE_SERVICE_ENDPOINTS
+              value: {{ .Values.config.gateServiceEndpoints | quote }}
+            - name: GAP_COALESCE_THRESHOLD
+              value: {{ .Values.config.gapCoalesceThreshold | quote }}
+            - name: BPS_MAX_BUFFERED_BYTES
+              value: {{ .Values.config.bpsMaxBufferedBytes | quote }}
+            - name: TRUST_REFRESH_INTERVAL_MS
+              value: {{ .Values.config.trustRefreshIntervalMs | quote }}
+            - name: TRUST_REFRESH_BATCH
+              value: {{ .Values.config.trustRefreshBatch | quote }}
+            {{- if .Values.database.urlSecret.name }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.urlSecret.name }}
+                  key: {{ .Values.database.urlSecret.key }}
+            {{- else }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "database.pwdSecret.name is required unless database.urlSecret is set" .Values.database.pwdSecret.name }}
+                  key: {{ required "database.pwdSecret.key is required unless database.urlSecret is set" .Values.database.pwdSecret.key }}
+            - name: DATABASE_URL
+              value: postgres://{{ .Values.database.user }}:$(POSTGRES_PASSWORD)@{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.db }}
+            {{- end }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if .Values.service.enabled }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
