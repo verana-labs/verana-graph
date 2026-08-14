@@ -44,19 +44,40 @@ config:
   nodeOptions: "--max-old-space-size=1536"
 
 database:
-  host: postgres
+  # When true, the chart runs its own PostgreSQL as a sidecar in the graph's StatefulSet, with a
+  # retained volume, and the app connects on localhost. When false, point `host`/`port` at an
+  # external PostgreSQL instead (e.g. a database co-located on the indexer's server).
+  enabled: true
+  # External connection target — used ONLY when `enabled: false`.
+  host: ""
   port: 5432
   user: verana_graph
   db: verana_graph
-  # The password is always read from an existing Kubernetes Secret.
-  # Example:
+  # Password shared by the embedded Postgres and the app connection. Always read from an existing
+  # Kubernetes Secret — required. Provide {name, key}:
   #   pwdSecret:
   #     name: my-db-secret
   #     key: password
   pwdSecret: {}
   # urlSecret: supply the whole connection string from a Secret instead, which
-  # takes precedence over the fields above.
+  # takes precedence over everything above (and over the embedded Postgres host).
   urlSecret: {}
+  # Embedded PostgreSQL — used ONLY when `enabled: true`.
+  image:
+    repository: postgres
+    tag: '16-alpine'
+    pullPolicy: IfNotPresent
+  storage:
+    size: 10Gi
+    # '' uses the cluster's default StorageClass; set e.g. csi-cinder-classic on devnet.
+    storageClassName: ''
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '1'
+      memory: 1Gi
 
 ingress:
   enabled: false

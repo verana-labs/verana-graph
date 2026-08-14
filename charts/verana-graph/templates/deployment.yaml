@@ -1,10 +1,11 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "verana-graph.fullname" . }}
   labels:
     {{- include "verana-graph.labels" . | nindent 4 }}
 spec:
+  serviceName: {{ include "verana-graph.fullname" . }}
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
@@ -60,13 +61,9 @@ spec:
                   name: {{ .Values.database.urlSecret.name }}
                   key: {{ .Values.database.urlSecret.key }}
             {{- else }}
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ required "database.pwdSecret.name is required unless database.urlSecret is set" .Values.database.pwdSecret.name }}
-                  key: {{ required "database.pwdSecret.key is required unless database.urlSecret is set" .Values.database.pwdSecret.key }}
+            {{- include "verana-graph.postgresPasswordEnv" . | nindent 12 }}
             - name: DATABASE_URL
-              value: postgres://{{ .Values.database.user }}:$(POSTGRES_PASSWORD)@{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.db }}
+              value: postgres://{{ .Values.database.user }}:$(POSTGRES_PASSWORD)@{{ include "verana-graph.databaseHost" . }}:{{ .Values.database.port }}/{{ .Values.database.db }}
             {{- end }}
             {{- with .Values.env }}
             {{- toYaml . | nindent 12 }}
@@ -95,6 +92,44 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+        {{- if .Values.database.enabled }}
+        # Embedded Postgres, sidecar in the same pod — the app reaches it on localhost:5432
+        - name: postgres
+          image: "{{ .Values.database.image.repository }}:{{ .Values.database.image.tag }}"
+          imagePullPolicy: {{ .Values.database.image.pullPolicy }}
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.database.user | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.database.db | quote }}
+            {{- include "verana-graph.postgresPasswordEnv" . | nindent 12 }}
+            # keep PGDATA in a subdirectory so a CSI volume's lost+found never collides with initdb
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command: ['pg_isready', '-U', {{ .Values.database.user | quote }}, '-d', {{ .Values.database.db | quote }}]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ['pg_isready', '-U', {{ .Values.database.user | quote }}, '-d', {{ .Values.database.db | quote }}]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.database.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -107,3 +142,20 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+  {{- if .Values.database.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        annotations:
+          # survive `helm uninstall`; a fresh bootstrap re-enumerates the whole DID universe,
+          # so keeping the volume is cheaper than rebuilding the projection
+          helm.sh/resource-policy: keep
+      spec:
+        accessModes: ['ReadWriteOnce']
+        {{- if .Values.database.storage.storageClassName }}
+        storageClassName: {{ .Values.database.storage.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.database.storage.size }}
+  {{- end }}
