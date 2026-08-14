@@ -21,11 +21,11 @@ export function normalizeFilterValue(field: string, raw: unknown): NormalizedFil
   if (raw !== null && typeof raw === 'object') {
     const entries = Object.entries(raw as Record<string, unknown>)
     if (entries.length !== 1) {
-      throw new ApiError('INVALID_REQUEST', `filter ${field} must carry exactly one operator`)
+      throw new ApiError('INVALID_INPUT', `filter ${field} must carry exactly one operator`)
     }
     const [op, value] = entries[0] as [string, unknown]
     if (!['eq', 'in', 'range', 'prefix', 'contains', 'containsAny'].includes(op)) {
-      throw new ApiError('UNSUPPORTED_OPERATOR', `unknown operator ${op} on ${field}`)
+      throw new ApiError('INVALID_INPUT', `unknown operator ${op} on ${field}`)
     }
     return { op: op as Operator, value }
   }
@@ -208,7 +208,7 @@ export function resolveFieldSpec(surface: string, field: string): FieldSpec {
     ServiceEndpoint: SERVICE_ENDPOINT_FILTERS,
   }
   const registry = table[surface]
-  if (!registry) throw new ApiError('INVALID_REQUEST', `unknown surface ${surface}`)
+  if (!registry) throw new ApiError('INVALID_INPUT', `unknown surface ${surface}`)
   const found = Object.hasOwn(registry, field) ? registry[field] : undefined
   if (found) return found
   if (surface === 'Ecosystem') {

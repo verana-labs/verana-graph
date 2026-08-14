@@ -25,7 +25,7 @@ function validEcs(q: Knex.QueryBuilder): Knex.QueryBuilder {
 
 async function getDidRow(db: Knex, did: string): Promise<DidRow> {
   const row = await db('dids').where({ did }).first<DidRow | undefined>()
-  if (!row) throw new ApiError('NOT_FOUND', `unknown did ${did}`)
+  if (!row) throw new ApiError('UNKNOWN_ID', `unknown did ${did}`)
   return row
 }
 
@@ -55,7 +55,7 @@ export async function a2(db: Knex, input: { did: string }): Promise<Json> {
   if (row.corporation_id !== null) {
     corp = await db('corporations').where('id', row.corporation_id).first()
     if (!corp) {
-      throw new ApiError('NOT_FOUND', `corporation ${row.corporation_id} not yet materialised`)
+      throw new ApiError('UNKNOWN_ID', `corporation ${row.corporation_id} not yet materialised`)
     }
   }
   const ecosystems = await db('ecosystems')
@@ -194,7 +194,7 @@ async function findCredential(
   if (ecs) return { kind: 'ecs', row: ecs }
   const vtc = await db('vtcs').where('id', credentialId).first<VtcRow | undefined>()
   if (vtc) return { kind: 'vtc', row: vtc }
-  throw new ApiError('NOT_FOUND', `unknown credential ${credentialId}`)
+  throw new ApiError('UNKNOWN_ID', `unknown credential ${credentialId}`)
 }
 
 // B1 - issuer recovery
@@ -205,11 +205,11 @@ export async function b1(db: Knex, input: { credentialId: string }): Promise<Jso
     .first<ParticipantRow | undefined>()
   if (!issuer) {
     // the ISSUED_BY target left ACTIVE and was hard-deleted per TG-ACT-1
-    throw new ApiError('NOT_FOUND', `issuer participant ${found.row.issuer_participant_id} no longer ACTIVE`)
+    throw new ApiError('UNKNOWN_ID', `issuer participant ${found.row.issuer_participant_id} no longer ACTIVE`)
   }
   const schema = await db('credential_schemas').where('id', found.row.credential_schema_id).first()
   const ecosystem = await db('ecosystems').where('id', found.row.ecosystem_id).first()
-  if (!schema || !ecosystem) throw new ApiError('NOT_FOUND', 'schema or ecosystem not materialised')
+  if (!schema || !ecosystem) throw new ApiError('UNKNOWN_ID', 'schema or ecosystem not materialised')
   return {
     credential: found.kind === 'ecs' ? ecsCredentialRef(found.row) : vtcRef(found.row),
     issuerDid: issuer.did_id,
@@ -226,7 +226,7 @@ export async function b2(db: Knex, input: { credentialId: string }): Promise<Jso
     .where('id', found.row.participant_id)
     .first<ParticipantRow | undefined>()
   if (!holder) {
-    throw new ApiError('NOT_FOUND', `holder participant ${found.row.participant_id} no longer ACTIVE`)
+    throw new ApiError('UNKNOWN_ID', `holder participant ${found.row.participant_id} no longer ACTIVE`)
   }
   return {
     credential: found.kind === 'ecs' ? ecsCredentialRef(found.row) : vtcRef(found.row),
@@ -238,7 +238,7 @@ export async function b2(db: Knex, input: { credentialId: string }): Promise<Jso
 // C1 - owned schemas
 export async function c1(db: Knex, input: { ecosystemId: number }): Promise<Json[]> {
   const eco = await db('ecosystems').where('id', input.ecosystemId).first()
-  if (!eco) throw new ApiError('NOT_FOUND', `unknown ecosystem ${input.ecosystemId}`)
+  if (!eco) throw new ApiError('UNKNOWN_ID', `unknown ecosystem ${input.ecosystemId}`)
   const rows = await db('credential_schemas').where('ecosystem_id', input.ecosystemId).orderBy('id')
   return rows.map(schemaRef)
 }
@@ -260,7 +260,7 @@ export async function c2(
   input: { ecosystemId: number; role?: string; credentialSchemaId?: number },
 ): Promise<Json> {
   const eco = await db('ecosystems').where('id', input.ecosystemId).first('id')
-  if (!eco) throw new ApiError('NOT_FOUND', `unknown ecosystem ${input.ecosystemId}`)
+  if (!eco) throw new ApiError('UNKNOWN_ID', `unknown ecosystem ${input.ecosystemId}`)
   let q = db('participants as p')
     .join('dids as d', 'd.did', 'p.did_id')
     .where('p.ecosystem_id', input.ecosystemId)
@@ -272,14 +272,14 @@ export async function c2(
 // C3 / E3 - governance framework summaries
 export async function c3(db: Knex, input: { ecosystemId: number }): Promise<Json> {
   const eco = await db('ecosystems').where('id', input.ecosystemId).first()
-  if (!eco) throw new ApiError('NOT_FOUND', `unknown ecosystem ${input.ecosystemId}`)
+  if (!eco) throw new ApiError('UNKNOWN_ID', `unknown ecosystem ${input.ecosystemId}`)
   return { egf: eco.egf ?? null }
 }
 
 // D1 - credentials based on a schema
 export async function d1(db: Knex, input: { credentialSchemaId: number }): Promise<Json> {
   const schema = await db('credential_schemas').where('id', input.credentialSchemaId).first('id')
-  if (!schema) throw new ApiError('NOT_FOUND', `unknown schema ${input.credentialSchemaId}`)
+  if (!schema) throw new ApiError('UNKNOWN_ID', `unknown schema ${input.credentialSchemaId}`)
   const ecs = await validEcs(db('ecs_credentials').where('credential_schema_id', input.credentialSchemaId))
     .orderBy('id')
     .select<EcsCredentialRow[]>()
@@ -292,7 +292,7 @@ export async function d1(db: Knex, input: { credentialSchemaId: number }): Promi
 
 export async function d2(db: Knex, input: { credentialSchemaId: number; role?: string }): Promise<Json> {
   const schema = await db('credential_schemas').where('id', input.credentialSchemaId).first('id')
-  if (!schema) throw new ApiError('NOT_FOUND', `unknown schema ${input.credentialSchemaId}`)
+  if (!schema) throw new ApiError('UNKNOWN_ID', `unknown schema ${input.credentialSchemaId}`)
   let q = db('participants as p')
     .join('dids as d', 'd.did', 'p.did_id')
     .where('p.credential_schema_id', input.credentialSchemaId)
@@ -303,7 +303,7 @@ export async function d2(db: Knex, input: { credentialSchemaId: number; role?: s
 // E1 - DIDs operated by a corporation
 export async function e1(db: Knex, input: { corporationId: number }): Promise<Json[]> {
   const corp = await db('corporations').where('id', input.corporationId).first('id')
-  if (!corp) throw new ApiError('NOT_FOUND', `unknown corporation ${input.corporationId}`)
+  if (!corp) throw new ApiError('UNKNOWN_ID', `unknown corporation ${input.corporationId}`)
   const rows = await db('dids').where('corporation_id', input.corporationId).orderBy('did').select<DidRow[]>()
   return rows.map(didRef)
 }
@@ -311,21 +311,21 @@ export async function e1(db: Knex, input: { corporationId: number }): Promise<Js
 // E2 - ecosystems controlled by a corporation
 export async function e2(db: Knex, input: { corporationId: number }): Promise<Json[]> {
   const corp = await db('corporations').where('id', input.corporationId).first('id')
-  if (!corp) throw new ApiError('NOT_FOUND', `unknown corporation ${input.corporationId}`)
+  if (!corp) throw new ApiError('UNKNOWN_ID', `unknown corporation ${input.corporationId}`)
   const rows = await db('ecosystems').where('corporation_id', input.corporationId).orderBy('id')
   return rows.map(ecosystemRef)
 }
 
 export async function e3(db: Knex, input: { corporationId: number }): Promise<Json> {
   const corp = await db('corporations').where('id', input.corporationId).first()
-  if (!corp) throw new ApiError('NOT_FOUND', `unknown corporation ${input.corporationId}`)
+  if (!corp) throw new ApiError('UNKNOWN_ID', `unknown corporation ${input.corporationId}`)
   return { cgf: corp.cgf ?? null }
 }
 
 // G1 - validator chain, root to leaf inclusive (TG-EDGE-4: finite tree, one ecosystem)
 export async function g1(db: Knex, input: { participantId: number }): Promise<Json[]> {
   const leaf = await db('participants').where('id', input.participantId).first('id')
-  if (!leaf) throw new ApiError('NOT_FOUND', `unknown participant ${input.participantId}`)
+  if (!leaf) throw new ApiError('UNKNOWN_ID', `unknown participant ${input.participantId}`)
   const result = await db.raw(
     `
     WITH RECURSIVE chain AS (

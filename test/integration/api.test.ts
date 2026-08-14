@@ -241,15 +241,37 @@ describe('read APIs against a bootstrapped graph', () => {
       expect(out[0]?.role).toBe('ECOSYSTEM')
     })
 
-    it('unknown ids return the documented NOT_FOUND error', async () => {
+    it('TG-ERR-1: unknown ids return UNKNOWN_ID with 404', async () => {
       const { status, body } = await traverse('A1', { did: 'did:mock:nope' })
       expect(status).toBe(404)
-      expect((body as { error: { code: string } }).error.code).toBe('NOT_FOUND')
+      expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_ID')
     })
 
-    it('malformed requests return INVALID_REQUEST', async () => {
-      const { status } = await traverse('A1', { nope: true })
+    it('TG-ERR-1: a malformed input returns INVALID_INPUT with 400', async () => {
+      const { status, body } = await traverse('A1', { nope: true })
       expect(status).toBe(400)
+      expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
+    })
+
+    it('TG-ERR-1: an unknown query selector returns UNKNOWN_QUERY with 400', async () => {
+      const { status, body } = await traverse('ZZ', { did: DIDS.vs })
+      expect(status).toBe(400)
+      expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_QUERY')
+    })
+
+    it('TG-ERR-1: an unknown filter field returns UNKNOWN_FILTER_FIELD with 400', async () => {
+      const { status, body } = await search({ surface: 'Did', filters: { 'Did.nope': { eq: 1 } } })
+      expect(status).toBe(400)
+      expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_FILTER_FIELD')
+    })
+
+    it('TG-ERR-1: an unsupported operator returns INVALID_INPUT with 400', async () => {
+      const { status, body } = await search({
+        surface: 'Did',
+        filters: { 'Did.trusted': { range: { gte: 1 } } },
+      })
+      expect(status).toBe(400)
+      expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
     })
   })
 
@@ -322,7 +344,7 @@ describe('read APIs against a bootstrapped graph', () => {
 
     it('unknown filter fields are rejected per surface', async () => {
       const { status, body } = await search({ surface: 'Ecosystem', filters: { 'Did.trusted': true } })
-      expect(status).toBe(422)
+      expect(status).toBe(400)
       expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_FILTER_FIELD')
     })
 
