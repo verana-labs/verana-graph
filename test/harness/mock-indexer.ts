@@ -23,6 +23,7 @@ export class MockIndexer {
   port = 0
   // simulates a live gap
   suppressWs = false
+  suppressAck = false
 
   constructor(readonly world: MockWorld) {}
 
@@ -91,6 +92,17 @@ export class MockIndexer {
     this.wss.on('connection', ws => {
       this.sockets.add(ws)
       ws.on('close', () => this.sockets.delete(ws))
+      ws.on('message', raw => {
+        let control: { action?: string }
+        try {
+          control = JSON.parse(raw.toString())
+        } catch {
+          return
+        }
+        if (control.action !== 'subscribe' || this.suppressAck) return
+        const last = this.world.blocks.at(-1)?.block ?? this.world.readyBlock - 1
+        ws.send(JSON.stringify({ type: 'subscribed', block: last + 1 }))
+      })
       ws.send(
         JSON.stringify({
           type: 'ready',

@@ -44,6 +44,31 @@ describe('ingestion lifecycle', () => {
     })
   }
 
+  it('TG-INGEST-3: bootstrap anchors on subscribed.block, not ready.block', async () => {
+    const world = buildWorld()
+    world.blocks.push({ type: 'block', block: 104, blockTime: new Date().toISOString(), changes: [] })
+    await mock.stop()
+    mock = new MockIndexer(world)
+    await mock.start()
+    const config = testConfig(mock.baseUrl, mock.wsUrl)
+    const rest = new IndexerRestClient(config.indexerBaseUrl)
+    const deref = new Dereferencer(db, rest, config, log)
+    orchestrator = new IngestOrchestrator(db, rest, deref, config.indexerWsUrl, log)
+
+    await orchestrator.start()
+    await waitFor(async () => {
+      const row = await db('ingestion_state').where('id', 1).first()
+      return row?.last_applied_block === 104
+    })
+  })
+
+  it('TG-INGEST-3: without the subscribed acknowledgement the bootstrap never starts', async () => {
+    mock.suppressAck = true
+    await orchestrator.start()
+    await new Promise(resolve => setTimeout(resolve, 400))
+    expect(await db('ingestion_state').where('id', 1).first()).toBeUndefined()
+  })
+
   it('TG-INGEST-3: bootstrap materialises the full snapshot at B-1', async () => {
     await bootstrapped()
 

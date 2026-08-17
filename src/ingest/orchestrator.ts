@@ -2,7 +2,14 @@ import { EventEmitter } from 'node:events'
 import { Knex } from 'knex'
 import { Dereferencer } from '../deref/deref'
 import { IndexerRestClient } from '../indexer/rest'
-import { BlockMessage, ChangeEnvelope, needsResolve, ReadyMessage, ResolveResponse } from '../indexer/types'
+import {
+  BlockMessage,
+  ChangeEnvelope,
+  needsResolve,
+  ReadyMessage,
+  ResolveResponse,
+  SubscribedMessage,
+} from '../indexer/types'
 import { IndexerSubscription } from '../indexer/ws'
 import { Logger } from '../util/logger'
 import { applyInlineTrust, reconcile, repairDerivedFacets } from './reconciler'
@@ -29,6 +36,7 @@ export class IngestOrchestrator {
   private previousBlock = -1
   private lastAppliedBlock = -1
   private blockIntervalMs = 6000
+  private readyBlockTime = new Date(0).toISOString()
   private reconnectAttempt = 0
   private stopped = false
   private refreshTimer?: NodeJS.Timeout
@@ -113,8 +121,10 @@ export class IngestOrchestrator {
       {
         onReady: msg => {
           this.blockIntervalMs = msg.blockIntervalMs
+          this.readyBlockTime = msg.blockTime
           this.reconnectAttempt = 0
-          // previousBlock starts at B - 1 so the very first live block can already expose a gap
+        },
+        onSubscribed: msg => {
           this.previousBlock = msg.block - 1
           void this.catchUp(msg).catch(err => {
             this.log.error({ err: (err as Error).message }, 'catch-up failed')
@@ -159,9 +169,9 @@ export class IngestOrchestrator {
   }
 
   // TG-INGEST-3 when the graph is empty, TG-INGEST-5 otherwise; both end by draining the buffer
-  private async catchUp(ready: ReadyMessage): Promise<void> {
+  private async catchUp(subscribed: SubscribedMessage): Promise<void> {
     if (this.lastAppliedBlock < 0) {
-      await this.bootstrap(ready)
+      await this.bootstrap(subscribed)
     } else {
       await this.recoverAndDrain()
       return
@@ -169,10 +179,10 @@ export class IngestOrchestrator {
     await this.drainBuffer()
   }
 
-  private async bootstrap(ready: ReadyMessage): Promise<void> {
-    const snapshotBlock = ready.block - 1
+  private async bootstrap(subscribed: SubscribedMessage): Promise<void> {
+    const snapshotBlock = subscribed.block - 1
     this.log.info({ snapshotBlock }, 'bootstrap: enumerating DID universe')
-    const evidence = { block: snapshotBlock, blockTime: ready.blockTime }
+    const evidence = { block: snapshotBlock, blockTime: this.readyBlockTime }
 
     const pending: Promise<void>[] = []
     let active = 0
@@ -207,7 +217,7 @@ export class IngestOrchestrator {
     await repairDerivedFacets(this.db)
 
     await this.db('ingestion_state')
-      .insert({ id: 1, last_applied_block: snapshotBlock, last_block_time: ready.blockTime })
+      .insert({ id: 1, last_applied_block: snapshotBlock, last_block_time: this.readyBlockTime })
       .onConflict('id')
       .merge()
     this.lastAppliedBlock = snapshotBlock

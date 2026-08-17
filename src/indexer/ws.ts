@@ -1,6 +1,6 @@
 import { WebSocket } from 'ws'
 import { Logger } from '../util/logger'
-import { BlockMessage, ReadyMessage } from './types'
+import { BlockMessage, ReadyMessage, SubscribedMessage } from './types'
 
 // TG-INGEST-1: all channels on, all opt-in sub-flags true, dids[] omitted (wildcard)
 export const CANONICAL_SUBSCRIBE = {
@@ -29,6 +29,7 @@ const MIN_LIVENESS_MS = 60_000
 
 export interface SubscriptionHandlers {
   onReady: (msg: ReadyMessage) => void
+  onSubscribed: (msg: SubscribedMessage) => void
   onBlock: (msg: BlockMessage) => void
   // fired on close, error, or liveness timeout; the orchestrator reconnects and runs gap recovery
   onDown: (reason: string) => void
@@ -39,6 +40,7 @@ export interface SubscriptionHandlers {
 export class IndexerSubscription {
   private ws?: WebSocket
   private livenessTimer?: NodeJS.Timeout
+  private ackTimer?: NodeJS.Timeout
   private blockIntervalMs = 6000
   private downFired = false
 
@@ -53,7 +55,7 @@ export class IndexerSubscription {
     this.ws = ws
     ws.on('open', () => this.log.debug('indexer ws open'))
     ws.on('message', data => {
-      let msg: ReadyMessage | BlockMessage
+      let msg: ReadyMessage | SubscribedMessage | BlockMessage
       try {
         msg = JSON.parse(data.toString())
       } catch {
@@ -64,7 +66,12 @@ export class IndexerSubscription {
         this.blockIntervalMs = msg.blockIntervalMs
         this.resetLiveness()
         ws.send(JSON.stringify(CANONICAL_SUBSCRIBE))
+        this.armAckTimeout()
         this.handlers.onReady(msg)
+      } else if (msg.type === 'subscribed') {
+        this.clearAckTimeout()
+        this.resetLiveness()
+        this.handlers.onSubscribed(msg)
       } else if (msg.type === 'block') {
         this.resetLiveness()
         this.handlers.onBlock(msg)
@@ -89,16 +96,32 @@ export class IndexerSubscription {
     }, timeout)
   }
 
+  private armAckTimeout(): void {
+    this.clearAckTimeout()
+    this.ackTimer = setTimeout(() => {
+      this.log.warn('no subscribed acknowledgement, treating the subscription as not established')
+      this.ws?.terminate()
+      this.down('subscribed timeout')
+    }, 2 * this.blockIntervalMs)
+  }
+
+  private clearAckTimeout(): void {
+    if (this.ackTimer) clearTimeout(this.ackTimer)
+    this.ackTimer = undefined
+  }
+
   private down(reason: string): void {
     if (this.downFired) return
     this.downFired = true
     if (this.livenessTimer) clearTimeout(this.livenessTimer)
+    this.clearAckTimeout()
     this.handlers.onDown(reason)
   }
 
   close(): void {
     this.downFired = true
     if (this.livenessTimer) clearTimeout(this.livenessTimer)
+    this.clearAckTimeout()
     this.ws?.close()
   }
 }
