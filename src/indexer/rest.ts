@@ -15,7 +15,7 @@ export function canonicalResolveBody(did: string): Record<string, unknown> {
   return {
     did,
     corporation: true,
-    participations: { states: ['ACTIVE'] },
+    participations: { states: ['ACTIVE', 'FUTURE', 'INACTIVE', 'EXPIRED', 'REVOKED', 'SLASHED', 'REPAID'] },
     ecsCredentials: true,
     services: true,
     presentations: true,

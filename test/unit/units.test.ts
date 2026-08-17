@@ -50,7 +50,7 @@ describe('canonical upstream payloads', () => {
     expect(canonicalResolveBody('did:x')).toEqual({
       did: 'did:x',
       corporation: true,
-      participations: { states: ['ACTIVE'] },
+      participations: { states: ['ACTIVE', 'FUTURE', 'INACTIVE', 'EXPIRED', 'REVOKED', 'SLASHED', 'REPAID'] },
       ecsCredentials: true,
       services: true,
       presentations: true,

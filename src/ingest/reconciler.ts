@@ -77,7 +77,32 @@ export async function reconcile(
   await upsertEcsCredentials(trx, response, evidence)
   await upsertDid(trx, response, evidence)
   await refreshDependentDids(trx, did, evidence)
+  await sweepUnreferencedParticipants(trx)
   return schemaLoads
+}
+
+export async function sweepUnreferencedParticipants(trx: Knex): Promise<void> {
+  for (;;) {
+    const deleted = await trx('participants as p')
+      .whereNot('p.state', 'ACTIVE')
+      .whereNotExists(function () {
+        this.select(1).from('ecs_credentials as ec').whereRaw('ec.issuer_participant_id = p.id')
+      })
+      .whereNotExists(function () {
+        this.select(1).from('ecs_credentials as ec').whereRaw('ec.participant_id = p.id')
+      })
+      .whereNotExists(function () {
+        this.select(1).from('vtcs as v').whereRaw('v.issuer_participant_id = p.id')
+      })
+      .whereNotExists(function () {
+        this.select(1).from('vtcs as v').whereRaw('v.participant_id = p.id')
+      })
+      .whereNotExists(function () {
+        this.select(1).from('participants as child').whereRaw('child.validator_participant_id = p.id')
+      })
+      .delete()
+    if (deleted === 0) return
+  }
 }
 
 async function upsertParticipants(trx: Knex, r: ResolveResponse, e: Evidence): Promise<void> {
@@ -94,7 +119,7 @@ async function upsertParticipants(trx: Knex, r: ResolveResponse, e: Evidence): P
       credential_schema_id: p.credentialSchemaId,
       ecosystem_id: p.ecosystemId,
       role: p.role,
-      state: 'ACTIVE',
+      state: p.state,
       weight: p.weight ?? null,
       weight_amount: coinAmount(p.weight),
       issued_credentials: p.issuedCredentials ?? null,
