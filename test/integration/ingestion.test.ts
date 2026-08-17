@@ -1,5 +1,6 @@
 import { Knex } from 'knex'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { participantRef } from '../../src/api/refs'
 import { Dereferencer } from '../../src/deref/deref'
 import { IndexerRestClient } from '../../src/indexer/rest'
 import { IngestOrchestrator } from '../../src/ingest/orchestrator'
@@ -128,13 +129,70 @@ describe('ingestion lifecycle', () => {
     expect((await db('ingestion_state').first()).last_applied_block).toBe(100)
   })
 
-  it('TG-ACT-1: a participant that leaves ACTIVE is hard-deleted on reconcile', async () => {
+  it('TG-ACT-1: a participant absent from the response is hard-deleted on reconcile', async () => {
     await bootstrapped()
     expect(await db('participants').where('id', 11).first()).toBeTruthy()
     mock.world.snapshots.get(DIDS.issuer)?.set(101, issuerSnapshot(false))
     mock.pushBlock(block(101, [{ did: DIDS.issuer, participations: true }]))
     await waitFor(async () => !(await db('participants').where('id', 11).first()))
     expect(await db('participants').where('id', 10).first()).toBeTruthy()
+  })
+
+  it('TG-ACT-1: a participant that leaves ACTIVE is retained with its state while referenced', async () => {
+    await bootstrapped()
+    const snap = structuredClone(issuerSnapshot(true))
+    const p11 = snap.participations?.find(p => p.id === 11)
+    if (p11) p11.state = 'EXPIRED'
+    mock.world.snapshots.get(DIDS.issuer)?.set(101, snap)
+    mock.pushBlock(block(101, [{ did: DIDS.issuer, participations: true }]))
+
+    await waitFor(async () => (await db('participants').where('id', 11).first())?.state === 'EXPIRED')
+    const row = await db('participants').where('id', 11).first()
+    expect(participantRef(row).state).toBe('EXPIRED')
+  })
+
+  it('TG-ACT-1: losing the last reference cascades the whole inactive subtree', async () => {
+    await bootstrapped()
+    const issuerSnap = structuredClone(issuerSnapshot(true))
+    for (const id of [11, 12]) {
+      const entry = issuerSnap.participations?.find(p => p.id === id)
+      if (entry) entry.state = 'EXPIRED'
+    }
+    issuerSnap.ecsCredentials = []
+    mock.world.snapshots.get(DIDS.issuer)?.set(101, issuerSnap)
+    mock.pushBlock(block(101, [{ did: DIDS.issuer, participations: true }]))
+
+    await waitFor(async () => (await db('participants').where('id', 11).first())?.state === 'EXPIRED')
+    expect(await db('vtcs').where('issuer_participant_id', 11).first()).toBeTruthy()
+
+    const vsSnap = structuredClone(vsSnapshot(false))
+    vsSnap.participations = vsSnap.participations?.filter(p => p.id !== 21)
+    mock.world.snapshots.get(DIDS.vs)?.set(102, vsSnap)
+    mock.pushBlock(block(102, [{ did: DIDS.vs, participations: true, presentations: true }]))
+
+    await waitFor(async () => !(await db('participants').where('id', 11).first()))
+    expect(await db('participants').where('id', 12).first()).toBeUndefined()
+    expect(await db('participants').where('id', 10).first()).toBeTruthy()
+  })
+
+  it('TG-ACT-1: an unreferenced non-ACTIVE entry is never persisted', async () => {
+    await bootstrapped()
+    const snap = structuredClone(issuerSnapshot(true))
+    snap.participations?.push({
+      id: 99,
+      vsOperator: 'verana1issueroperator',
+      role: 'ISSUER',
+      state: 'FUTURE',
+      credentialSchemaId: 100,
+      ecosystemId: 7,
+      weight: '1uvna',
+      validatorParticipantId: 1,
+    })
+    mock.world.snapshots.get(DIDS.issuer)?.set(101, snap)
+    mock.pushBlock(block(101, [{ did: DIDS.issuer, participations: true }]))
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 101)
+    expect(await db('participants').where('id', 99).first()).toBeUndefined()
   })
 
   it('TG-ACT-2: archive flips are observed in both directions and never delete', async () => {

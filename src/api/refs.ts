@@ -112,6 +112,7 @@ export interface ParticipantRow {
   id: number
   did_id: string
   role: string
+  state: string
   credential_schema_id: number
   ecosystem_id: number
   vs_operator: string | null
@@ -127,7 +128,7 @@ export function participantRef(row: ParticipantRow) {
     id: row.id,
     didId: row.did_id,
     role: row.role,
-    state: 'ACTIVE',
+    state: row.state,
     credentialSchemaId: row.credential_schema_id,
     ecosystemId: row.ecosystem_id,
     validatorParticipantId: row.validator_participant_id,
