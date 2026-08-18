@@ -36,6 +36,7 @@ export class IngestOrchestrator {
   private previousBlock = -1
   private lastAppliedBlock = -1
   private blockIntervalMs = 6000
+  private generation = 0
   private readyBlockTime = new Date(0).toISOString()
   private reconnectAttempt = 0
   private stopped = false
@@ -116,23 +117,29 @@ export class IngestOrchestrator {
     if (this.stopped) return
     this.catchingUp = true
     this.buffer = []
+    const generation = ++this.generation
+    const stale = (): boolean => generation !== this.generation || this.stopped
     this.subscription = new IndexerSubscription(
       this.wsUrl,
       {
         onReady: msg => {
+          if (stale()) return
           this.blockIntervalMs = msg.blockIntervalMs
           this.readyBlockTime = msg.blockTime
           this.reconnectAttempt = 0
         },
         onSubscribed: msg => {
+          if (stale()) return
           this.previousBlock = msg.block - 1
           void this.catchUp(msg).catch(err => {
+            if (stale()) return
             this.log.error({ err: (err as Error).message }, 'catch-up failed')
             this.subscription?.close()
             this.scheduleReconnect()
           })
         },
         onBlock: msg => {
+          if (stale()) return
           // previousBlock advances on receipt; lastAppliedBlock only on durable commit
           const gap = msg.block > this.previousBlock + 1
           this.previousBlock = msg.block
@@ -152,6 +159,7 @@ export class IngestOrchestrator {
           }
         },
         onDown: reason => {
+          if (stale()) return
           this.log.warn({ reason }, 'indexer subscription down')
           this.scheduleReconnect()
         },
@@ -248,9 +256,27 @@ export class IngestOrchestrator {
     while (this.buffer.length > 0) {
       const msg = this.buffer.shift() as BlockMessage
       if (msg.block <= this.lastAppliedBlock) continue
+      if (msg.block > this.lastAppliedBlock + 1) {
+        this.log.warn({ from: this.lastAppliedBlock + 1, to: msg.block - 1 }, 'buffered gap, replaying')
+        await this.replayUpTo(msg.block)
+      }
+      if (msg.block <= this.lastAppliedBlock) continue
       await this.applyBlock(msg)
     }
     this.catchingUp = false
+  }
+
+  private async replayUpTo(exclusiveEnd: number): Promise<void> {
+    let from = this.lastAppliedBlock + 1
+    for (;;) {
+      const page = await this.rest.listChanges(from)
+      for (const b of page.blocks) {
+        if (b.block >= exclusiveEnd) return
+        await this.applyBlock({ type: 'block', ...b })
+      }
+      if (page.nextFromBlock === null || page.nextFromBlock >= exclusiveEnd) return
+      from = page.nextFromBlock
+    }
   }
 
   // Live blocks are applied strictly in order; a queue depth of one is enough because the WS

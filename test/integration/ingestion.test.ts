@@ -44,6 +44,23 @@ describe('ingestion lifecycle', () => {
     })
   }
 
+  it('a gap inside the buffered sequence is replayed, not silently skipped', async () => {
+    mock.resolveDelayMs = 120
+    await orchestrator.start()
+    await waitFor(async () => mock.resolveCalls.length > 0)
+
+    mock.pushBlock(block(100, []))
+    mock.world.snapshots.get(DIDS.issuer)?.set(101, issuerSnapshot(false))
+    mock.suppressWs = true
+    mock.pushBlock(block(101, [{ did: DIDS.issuer, participations: true }]))
+    mock.suppressWs = false
+    mock.pushBlock(block(102, []))
+    mock.resolveDelayMs = 0
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 102, 20_000)
+    expect(await db('participants').where('id', 11).first()).toBeUndefined()
+  })
+
   it('TG-INGEST-3: bootstrap anchors on subscribed.block, not ready.block', async () => {
     const world = buildWorld()
     world.blocks.push({ type: 'block', block: 104, blockTime: new Date().toISOString(), changes: [] })
