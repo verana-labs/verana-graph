@@ -150,6 +150,24 @@ describe('ingestion lifecycle', () => {
     expect(await db('participants').where('id', 10).first()).toBeTruthy()
   })
 
+  it('TG-ACT-1: the bootstrap sweep removes unreferenced non-ACTIVE entries once, after all resolves', async () => {
+    const snap = structuredClone(issuerSnapshot(true))
+    snap.participations?.push({
+      id: 98,
+      vsOperator: 'verana1issueroperator',
+      role: 'ISSUER',
+      state: 'FUTURE',
+      credentialSchemaId: 100,
+      ecosystemId: 7,
+      weight: '1uvna',
+      validatorParticipantId: 1,
+    })
+    mock.world.snapshots.get(DIDS.issuer)?.set(0, snap)
+    await bootstrapped()
+    expect(await db('participants').where('id', 98).first()).toBeUndefined()
+    expect(await db('participants').where('id', 11).first()).toBeTruthy()
+  })
+
   it('TG-ACT-1: an unreferenced non-ACTIVE entry is never persisted', async () => {
     await bootstrapped()
     const snap = structuredClone(issuerSnapshot(true))

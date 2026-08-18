@@ -5,7 +5,7 @@ import { IndexerRestClient } from '../indexer/rest'
 import { BlockMessage, ChangeEnvelope, needsResolve, ReadyMessage, ResolveResponse } from '../indexer/types'
 import { IndexerSubscription } from '../indexer/ws'
 import { Logger } from '../util/logger'
-import { applyInlineTrust, reconcile, repairDerivedFacets } from './reconciler'
+import { applyInlineTrust, reconcile, repairDerivedFacets, sweepUnreferencedParticipants } from './reconciler'
 
 export interface BlockCommit {
   block: number
@@ -180,7 +180,7 @@ export class IngestOrchestrator {
     const runOne = async (did: string): Promise<void> => {
       try {
         const response = await this.rest.resolve(did, snapshotBlock)
-        await this.applyResponse(response, evidence)
+        await this.applyResponse(response, evidence, false)
       } catch (err) {
         this.log.error({ did, err: (err as Error).message }, 'bootstrap resolve failed')
         throw err
@@ -205,6 +205,7 @@ export class IngestOrchestrator {
     await Promise.all(pending)
     // concurrent snapshot resolves cannot see each other's writes; re-derive cross-DID facets
     await repairDerivedFacets(this.db)
+    await sweepUnreferencedParticipants(this.db)
 
     await this.db('ingestion_state')
       .insert({ id: 1, last_applied_block: snapshotBlock, last_block_time: ready.blockTime })
@@ -304,10 +305,11 @@ export class IngestOrchestrator {
   private async applyResponse(
     response: ResolveResponse,
     evidence: { block: number; blockTime: string },
+    sweep = true,
   ): Promise<void> {
     const postCommit: (() => Promise<void>)[] = []
     await this.db.transaction(async trx => {
-      const loads = await reconcile(trx, response, evidence)
+      const loads = await reconcile(trx, response, evidence, sweep)
       this.queueDeref(response, loads, evidence, postCommit)
     })
     for (const task of postCommit) await task()
