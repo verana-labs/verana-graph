@@ -127,6 +127,11 @@ export class MockIndexer {
     return `ws://localhost:${this.port}`
   }
 
+  dropSockets(): void {
+    for (const ws of this.sockets) ws.terminate()
+    this.sockets.clear()
+  }
+
   pushBlock(msg: BlockMessage): void {
     this.world.blocks.push(msg)
     if (this.suppressWs) return

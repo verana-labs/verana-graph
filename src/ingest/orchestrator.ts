@@ -131,7 +131,7 @@ export class IngestOrchestrator {
         onSubscribed: msg => {
           if (stale()) return
           this.previousBlock = msg.block - 1
-          void this.catchUp(msg).catch(err => {
+          void this.catchUp(msg, stale).catch(err => {
             if (stale()) return
             this.log.error({ err: (err as Error).message }, 'catch-up failed')
             this.subscription?.close()
@@ -149,7 +149,7 @@ export class IngestOrchestrator {
             this.log.warn({ from: this.lastAppliedBlock, to: msg.block }, 'live gap detected')
             this.catchingUp = true
             this.buffer = [msg]
-            void this.recoverAndDrain().catch(err => {
+            void this.recoverAndDrain(stale).catch(err => {
               this.log.error({ err: (err as Error).message }, 'gap recovery failed')
               this.subscription?.close()
               this.scheduleReconnect()
@@ -177,17 +177,17 @@ export class IngestOrchestrator {
   }
 
   // TG-INGEST-3 when the graph is empty, TG-INGEST-5 otherwise; both end by draining the buffer
-  private async catchUp(subscribed: SubscribedMessage): Promise<void> {
+  private async catchUp(subscribed: SubscribedMessage, stale: () => boolean): Promise<void> {
     if (this.lastAppliedBlock < 0) {
-      await this.bootstrap(subscribed)
+      await this.bootstrap(subscribed, stale)
     } else {
-      await this.recoverAndDrain()
+      await this.recoverAndDrain(stale)
       return
     }
-    await this.drainBuffer()
+    await this.drainBuffer(stale)
   }
 
-  private async bootstrap(subscribed: SubscribedMessage): Promise<void> {
+  private async bootstrap(subscribed: SubscribedMessage, stale: () => boolean): Promise<void> {
     const snapshotBlock = subscribed.block - 1
     const snapshotTime = subscribed.blockTime ?? this.readyBlockTime
     this.log.info({ snapshotBlock }, 'bootstrap: enumerating DID universe')
@@ -222,6 +222,10 @@ export class IngestOrchestrator {
       pending.push(runOne(did))
     }
     await Promise.all(pending)
+    if (stale()) {
+      this.log.warn({ snapshotBlock }, 'bootstrap superseded by a newer connection, discarding')
+      return
+    }
     // concurrent snapshot resolves cannot see each other's writes; re-derive cross-DID facets
     await repairDerivedFacets(this.db)
 
@@ -234,12 +238,13 @@ export class IngestOrchestrator {
   }
 
   // TG-INGEST-5: replay from lastAppliedBlock + 1 until caught up or overlapping the buffer
-  private async recoverAndDrain(): Promise<void> {
+  private async recoverAndDrain(stale: () => boolean): Promise<void> {
     // let any in-flight live block finish before replaying; recovery and live application
     // must never interleave on the same lastAppliedBlock
     await this.applyChain
     let from = this.lastAppliedBlock + 1
     for (;;) {
+      if (stale()) return
       const smallestBuffered = this.buffer[0]?.block
       const page = await this.rest.listChanges(from)
       for (const b of page.blocks) {
@@ -250,11 +255,12 @@ export class IngestOrchestrator {
       if (smallestBuffered !== undefined && page.nextFromBlock >= smallestBuffered) break
       from = page.nextFromBlock
     }
-    await this.drainBuffer()
+    await this.drainBuffer(stale)
   }
 
-  private async drainBuffer(): Promise<void> {
+  private async drainBuffer(stale: () => boolean): Promise<void> {
     while (this.buffer.length > 0) {
+      if (stale()) return
       const msg = this.buffer.shift() as BlockMessage
       if (msg.block <= this.lastAppliedBlock) continue
       if (msg.block > this.lastAppliedBlock + 1) {
@@ -264,7 +270,7 @@ export class IngestOrchestrator {
       if (msg.block <= this.lastAppliedBlock) continue
       await this.applyBlock(msg)
     }
-    this.catchingUp = false
+    if (!stale()) this.catchingUp = false
   }
 
   private async replayUpTo(exclusiveEnd: number): Promise<void> {

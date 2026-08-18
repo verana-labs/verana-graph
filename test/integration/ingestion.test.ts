@@ -45,7 +45,7 @@ describe('ingestion lifecycle', () => {
   }
 
   it('a gap inside the buffered sequence is replayed, not silently skipped', async () => {
-    mock.resolveDelayMs = 120
+    mock.resolveDelayMs = 500
     await orchestrator.start()
     await waitFor(async () => mock.resolveCalls.length > 0)
 
@@ -55,10 +55,25 @@ describe('ingestion lifecycle', () => {
     mock.pushBlock(block(101, [{ did: DIDS.issuer, participations: true }]))
     mock.suppressWs = false
     mock.pushBlock(block(102, []))
+    expect(await db('ingestion_state').where('id', 1).first()).toBeUndefined()
     mock.resolveDelayMs = 0
 
     await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 102, 20_000)
     expect(await db('participants').where('id', 11).first()).toBeUndefined()
+  })
+
+  it('a bootstrap superseded by a reconnect never commits its snapshot', async () => {
+    mock.resolveDelayMs = 2500
+    await orchestrator.start()
+    await waitFor(async () => mock.resolveCalls.length > 0)
+
+    mock.resolveDelayMs = 0
+    mock.world.readyBlock = 106
+    mock.dropSockets()
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 105, 20_000)
+    await new Promise(r => setTimeout(r, 2800))
+    expect((await db('ingestion_state').first()).last_applied_block).toBe(105)
   })
 
   it('TG-INGEST-3: bootstrap anchors on subscribed.block, not ready.block', async () => {
