@@ -276,6 +276,7 @@ export class IngestOrchestrator {
       for (const envelope of msg.changes) {
         await this.applyEnvelope(trx, envelope, resolves.get(envelope.did), evidence, postCommit)
       }
+      await sweepUnreferencedParticipants(trx)
       await trx('ingestion_state')
         .insert({ id: 1, last_applied_block: msg.block, last_block_time: msg.blockTime })
         .onConflict('id')
@@ -309,8 +310,9 @@ export class IngestOrchestrator {
   ): Promise<void> {
     const postCommit: (() => Promise<void>)[] = []
     await this.db.transaction(async trx => {
-      const loads = await reconcile(trx, response, evidence, sweep)
+      const loads = await reconcile(trx, response, evidence)
       this.queueDeref(response, loads, evidence, postCommit)
+      if (sweep) await sweepUnreferencedParticipants(trx)
     })
     for (const task of postCommit) await task()
   }

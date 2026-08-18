@@ -150,22 +150,53 @@ describe('ingestion lifecycle', () => {
     expect(await db('participants').where('id', 10).first()).toBeTruthy()
   })
 
-  it('TG-ACT-1: the bootstrap sweep removes unreferenced non-ACTIVE entries once, after all resolves', async () => {
-    const snap = structuredClone(issuerSnapshot(true))
-    snap.participations?.push({
-      id: 98,
-      vsOperator: 'verana1issueroperator',
-      role: 'ISSUER',
-      state: 'FUTURE',
-      credentialSchemaId: 100,
-      ecosystemId: 7,
-      weight: '1uvna',
-      validatorParticipantId: 1,
+  function crossDidOnlyWorld(): void {
+    const issuer = structuredClone(issuerSnapshot(true))
+    const p11 = issuer.participations?.find(p => p.id === 11)
+    if (p11) p11.state = 'EXPIRED'
+    issuer.participations = issuer.participations?.filter(p => p.id !== 12)
+    issuer.ecsCredentials = []
+    mock.world.snapshots.get(DIDS.issuer)?.set(0, issuer)
+  }
+
+  it('TG-ACT-1: bootstrap retains a non-ACTIVE participant referenced only by a later resolve', async () => {
+    crossDidOnlyWorld()
+    mock.resolveDelayByDid.set(DIDS.vs, 250)
+
+    await orchestrator.start()
+    await waitFor(async () => {
+      const row = await db('ingestion_state').where('id', 1).first()
+      return row?.last_applied_block === 99
     })
-    mock.world.snapshots.get(DIDS.issuer)?.set(0, snap)
+
+    const row = await db('participants').where('id', 11).first()
+    expect(row?.state).toBe('EXPIRED')
+  })
+
+  it('TG-ACT-1: a reference created later in the same block keeps the participant alive', async () => {
+    const vsBase = structuredClone(vsSnapshot(false))
+    vsBase.participations = vsBase.participations?.filter(p => p.id !== 21)
+    mock.world.snapshots.get(DIDS.vs)?.set(0, vsBase)
     await bootstrapped()
-    expect(await db('participants').where('id', 98).first()).toBeUndefined()
-    expect(await db('participants').where('id', 11).first()).toBeTruthy()
+
+    const issuerNext = structuredClone(issuerSnapshot(true))
+    const p11 = issuerNext.participations?.find(p => p.id === 11)
+    if (p11) p11.state = 'EXPIRED'
+    issuerNext.participations = issuerNext.participations?.filter(p => p.id !== 12)
+    issuerNext.ecsCredentials = []
+    mock.world.snapshots.get(DIDS.issuer)?.set(101, issuerNext)
+    mock.world.snapshots.get(DIDS.vs)?.set(101, vsSnapshot(true))
+
+    mock.pushBlock(
+      block(101, [
+        { did: DIDS.issuer, participations: true },
+        { did: DIDS.vs, participations: true, presentations: true },
+      ]),
+    )
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 101)
+    const row = await db('participants').where('id', 11).first()
+    expect(row?.state).toBe('EXPIRED')
   })
 
   it('TG-ACT-1: an unreferenced non-ACTIVE entry is never persisted', async () => {

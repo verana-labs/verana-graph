@@ -65,7 +65,6 @@ export async function reconcile(
   trx: Knex,
   response: ResolveResponse,
   evidence: Evidence,
-  sweep = true,
 ): Promise<SchemaLoadRequest[]> {
   const schemaLoads: SchemaLoadRequest[] = []
   const did = response.did
@@ -78,7 +77,6 @@ export async function reconcile(
   await upsertEcsCredentials(trx, response, evidence)
   await upsertDid(trx, response, evidence)
   await refreshDependentDids(trx, did, evidence)
-  if (sweep) await sweepUnreferencedParticipants(trx)
   return schemaLoads
 }
 

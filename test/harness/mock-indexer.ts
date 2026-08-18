@@ -23,6 +23,7 @@ export class MockIndexer {
   port = 0
   // simulates a live gap
   suppressWs = false
+  resolveDelayByDid = new Map<string, number>()
 
   constructor(readonly world: MockWorld) {}
 
@@ -54,9 +55,11 @@ export class MockIndexer {
         req.on('data', c => {
           raw += c
         })
-        req.on('end', () => {
+        req.on('end', async () => {
           const did = (JSON.parse(raw) as { did: string }).did
           this.resolveCalls.push({ did, height })
+          const delay = this.resolveDelayByDid.get(did) ?? 0
+          if (delay > 0) await new Promise(r => setTimeout(r, delay))
           const snap = this.resolveAt(did, height)
           if (!snap) return json(404, { error: 'unknown did' })
           json(200, snap)
