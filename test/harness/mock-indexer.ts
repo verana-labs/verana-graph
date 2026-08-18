@@ -103,7 +103,7 @@ export class MockIndexer {
         }
         if (control.action !== 'subscribe' || this.suppressAck) return
         const last = this.world.blocks.at(-1)?.block ?? this.world.readyBlock - 1
-        ws.send(JSON.stringify({ type: 'subscribed', block: last + 1 }))
+        ws.send(JSON.stringify({ type: 'subscribed', block: last + 1, blockTime: new Date().toISOString() }))
       })
       ws.send(
         JSON.stringify({

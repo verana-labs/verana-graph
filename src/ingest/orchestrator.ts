@@ -189,8 +189,9 @@ export class IngestOrchestrator {
 
   private async bootstrap(subscribed: SubscribedMessage): Promise<void> {
     const snapshotBlock = subscribed.block - 1
+    const snapshotTime = subscribed.blockTime ?? this.readyBlockTime
     this.log.info({ snapshotBlock }, 'bootstrap: enumerating DID universe')
-    const evidence = { block: snapshotBlock, blockTime: this.readyBlockTime }
+    const evidence = { block: snapshotBlock, blockTime: snapshotTime }
 
     const pending: Promise<void>[] = []
     let active = 0
@@ -225,7 +226,7 @@ export class IngestOrchestrator {
     await repairDerivedFacets(this.db)
 
     await this.db('ingestion_state')
-      .insert({ id: 1, last_applied_block: snapshotBlock, last_block_time: this.readyBlockTime })
+      .insert({ id: 1, last_applied_block: snapshotBlock, last_block_time: snapshotTime })
       .onConflict('id')
       .merge()
     this.lastAppliedBlock = snapshotBlock
