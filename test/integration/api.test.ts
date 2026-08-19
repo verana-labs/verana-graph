@@ -70,11 +70,20 @@ describe('read APIs against a bootstrapped graph', () => {
     await db.destroy()
   })
 
-  async function traverse(query: string, input: unknown): Promise<{ status: number; body: never }> {
+  async function traverse(
+    query: string,
+    input: unknown,
+    page?: { limit?: number; cursor?: string | null },
+  ): Promise<{ status: number; body: never }> {
     const res = await fetch(`${baseUrl}/v4/graph/traverse`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query, input }),
+      body: JSON.stringify({
+        query,
+        input,
+        ...(page?.limit !== undefined ? { limit: page.limit } : {}),
+        ...(page?.cursor ? { cursor: page.cursor } : {}),
+      }),
     })
     return { status: res.status, body: (await res.json()) as never }
   }
@@ -165,6 +174,42 @@ describe('read APIs against a bootstrapped graph', () => {
       const { body } = await traverse('A7', { did: DIDS.vs, role: 'HOLDER' })
       expectValidTraverse(body)
       expect((body as { output: unknown[] }).output).toHaveLength(2)
+    })
+
+    it('TG-QRY-6: limit bounds the page and nextCursor walks the rest', async () => {
+      const first = await traverse('A7', { did: DIDS.vs }, { limit: 1 })
+      const page1 = first.body as { output: unknown[]; nextCursor: string | null }
+      expect(page1.output).toHaveLength(1)
+      expect(page1.nextCursor).toBeTypeOf('string')
+
+      const second = await traverse('A7', { did: DIDS.vs }, { limit: 1, cursor: page1.nextCursor })
+      const page2 = second.body as { output: unknown[]; nextCursor: string | null }
+      expect(page2.output).toHaveLength(1)
+      expect(page2.nextCursor).toBeNull()
+
+      const ids = [...page1.output, ...page2.output].map(
+        i => (i as { participant: { id: number } }).participant.id,
+      )
+      expect(new Set(ids).size).toBe(2)
+
+      const whole = await traverse('A7', { did: DIDS.vs })
+      const allIds = (whole.body as { output: unknown[] }).output.map(
+        i => (i as { participant: { id: number } }).participant.id,
+      )
+      expect(ids).toEqual(allIds)
+    })
+
+    it('TG-QRY-6: a shape-fixed query ignores limit/cursor and returns nextCursor null', async () => {
+      const { body } = await traverse('A1', { did: DIDS.vs }, { limit: 1 })
+      expect((body as { nextCursor: string | null }).nextCursor).toBeNull()
+    })
+
+    it('TG-QRY-6: a cursor replayed against different input is rejected', async () => {
+      const first = await traverse('A7', { did: DIDS.vs }, { limit: 1 })
+      const cursor = (first.body as { nextCursor: string }).nextCursor
+      const { status, body } = await traverse('A7', { did: DIDS.issuer }, { limit: 1, cursor })
+      expect(status).toBe(400)
+      expect((body as { error: { code: string } }).error.code).toBe('INVALID_CURSOR')
     })
 
     it('B1 issuer recovery', async () => {
@@ -350,6 +395,19 @@ describe('read APIs against a bootstrapped graph', () => {
       const { status, body } = await search({ surface: 'Ecosystem', filters: { 'Did.trusted': true } })
       expect(status).toBe(400)
       expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_FILTER_FIELD')
+    })
+
+    it('TG-FCT-7: an empty cursor is rejected, never silently re-anchored', async () => {
+      const { status, body } = await search({ surface: 'Did', cursor: '' })
+      expect(status).toBe(400)
+      expect((body as { error: { code: string } }).error.code).toBe('INVALID_CURSOR')
+    })
+
+    it('TG-FCT-7: a cursor decoding to null is rejected, not a 500', async () => {
+      const cursor = Buffer.from('null').toString('base64url')
+      const { status, body } = await search({ surface: 'Did', cursor })
+      expect(status).toBe(400)
+      expect((body as { error: { code: string } }).error.code).toBe('INVALID_CURSOR')
     })
 
     it('ecosystem surface with participants[role] range filter', async () => {

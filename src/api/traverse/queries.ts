@@ -1,5 +1,12 @@
 import { Knex } from 'knex'
 import { ApiError } from '../errors'
+import { type DualKey, encodeDualKey, type PageReq, parseDualKey, takePage } from './cursor'
+
+export interface Paged {
+  output: Json | Json[]
+  nextCursor: string | null
+}
+
 import {
   corporationRef,
   DidRow,
@@ -78,9 +85,12 @@ export async function a3(db: Knex, input: { did: string }): Promise<Json[]> {
 }
 
 // A4 - linked VPs and contained VTCs
-export async function a4(db: Knex, input: { did: string }): Promise<Json[]> {
+export async function a4(db: Knex, input: { did: string }, page: PageReq): Promise<Paged> {
   await getDidRow(db, input.did)
-  const vps = await db('linked_vps').where('did_id', input.did).orderBy('id')
+  let vpQ = db('linked_vps').where('did_id', input.did)
+  if (page.after) vpQ = vpQ.where('id', '>', page.after)
+  const raw = await vpQ.orderBy('id').limit(page.limit + 1)
+  const { rows: vps, nextCursor } = takePage(raw, page, r => String(r.id))
   const out: Json[] = []
   for (const vp of vps) {
     const vtcs = await db('vtcs as v')
@@ -95,15 +105,24 @@ export async function a4(db: Knex, input: { did: string }): Promise<Json[]> {
       vtcs: vtcs.map(vtcRef),
     })
   }
-  return out
+  return { output: out, nextCursor }
 }
 
 // A5 - held credentials (DID is subject), enriched with issuer, schema, ecosystem
-export async function a5(db: Knex, input: { did: string; ecsSchema?: string }): Promise<Json[]> {
+export async function a5(
+  db: Knex,
+  input: { did: string; ecsSchema?: string },
+  page: PageReq,
+): Promise<Paged> {
   await getDidRow(db, input.did)
   let q = validEcs(db('ecs_credentials').where('subject_did', input.did))
   if (input.ecsSchema) q = q.where('ecs_schema', input.ecsSchema)
-  const creds = await q.orderBy('id').select<EcsCredentialRow[]>()
+  if (page.after) q = q.where('id', '>', page.after)
+  const raw = await q
+    .orderBy('id')
+    .limit(page.limit + 1)
+    .select<EcsCredentialRow[]>()
+  const { rows: creds, nextCursor } = takePage(raw, page, r => r.id)
   const out: Json[] = []
   for (const c of creds) {
     const schema = await db('credential_schemas').where('id', c.credential_schema_id).first()
@@ -124,19 +143,55 @@ export async function a5(db: Knex, input: { did: string; ecsSchema?: string }): 
     }
     out.push(item)
   }
-  return out
+  return { output: out, nextCursor }
+}
+
+async function fetchDualPage(
+  ecsBase: Knex.QueryBuilder,
+  vtcBase: Knex.QueryBuilder | null,
+  page: PageReq,
+): Promise<{ ecs: EcsCredentialRow[]; vtcs: VtcRow[]; nextCursor: string | null }> {
+  const anchor = parseDualKey(page.after)
+  const want = page.limit + 1
+  let ecs: EcsCredentialRow[] = []
+  if (!anchor || anchor.phase === 'ecs') {
+    let q = ecsBase
+    if (anchor && anchor.phase === 'ecs') {
+      q = q.whereRaw('(subject_did, id) > (?, ?)', [anchor.subjectDid, anchor.id])
+    }
+    ecs = await q.orderBy(['subject_did', 'id']).limit(want).select<EcsCredentialRow[]>()
+  }
+  let vtcs: VtcRow[] = []
+  if (vtcBase && ecs.length < want) {
+    let q = vtcBase
+    if (anchor && anchor.phase === 'vtc') q = q.where('id', '>', anchor.id)
+    vtcs = await q
+      .orderBy('id')
+      .limit(want - ecs.length)
+      .select<VtcRow[]>()
+  }
+  const keys: DualKey[] = [
+    ...ecs.map(c => ({ phase: 'ecs' as const, subjectDid: c.subject_did, id: c.id })),
+    ...vtcs.map(v => ({ phase: 'vtc' as const, id: v.id })),
+  ]
+  const { nextCursor } = takePage(keys, page, encodeDualKey)
+  const keep = keys.length > page.limit ? page.limit : keys.length
+  const ecsKeep = Math.min(ecs.length, keep)
+  return { ecs: ecs.slice(0, ecsKeep), vtcs: vtcs.slice(0, keep - ecsKeep), nextCursor }
 }
 
 // A6 - issued credentials: outflow through the DID's ISSUER participants
-export async function a6(db: Knex, input: { did: string; ecsSchema?: string }): Promise<Json> {
+export async function a6(
+  db: Knex,
+  input: { did: string; ecsSchema?: string },
+  page: PageReq,
+): Promise<Paged> {
   await getDidRow(db, input.did)
   const issuerIds = db('participants').where('did_id', input.did).select('id')
   let ecsQ = validEcs(db('ecs_credentials').whereIn('issuer_participant_id', issuerIds))
   if (input.ecsSchema) ecsQ = ecsQ.where('ecs_schema', input.ecsSchema)
-  const ecs = await ecsQ.orderBy('id').select<EcsCredentialRow[]>()
-  const vtcs = input.ecsSchema
-    ? []
-    : await db('vtcs').whereIn('issuer_participant_id', issuerIds).orderBy('id').select<VtcRow[]>()
+  const vtcQ = input.ecsSchema ? null : db('vtcs').whereIn('issuer_participant_id', issuerIds)
+  const { ecs, vtcs, nextCursor } = await fetchDualPage(ecsQ, vtcQ, page)
 
   const enrich = async (schemaId: number, ecosystemId: number) => {
     const schema = await db('credential_schemas').where('id', schemaId).first()
@@ -161,15 +216,20 @@ export async function a6(db: Knex, input: { did: string; ecsSchema?: string }): 
       })
     }
   }
-  return { ecsCredentials: ecsItems, vtcs: vtcItems }
+  return { output: { ecsCredentials: ecsItems, vtcs: vtcItems }, nextCursor }
 }
 
 // A7 - participants by role
-export async function a7(db: Knex, input: { did: string; role?: string }): Promise<Json[]> {
+export async function a7(db: Knex, input: { did: string; role?: string }, page: PageReq): Promise<Paged> {
   await getDidRow(db, input.did)
   let q = db('participants').where('did_id', input.did)
   if (input.role) q = q.where('role', input.role)
-  const rows = await q.orderBy('id').select<ParticipantRow[]>()
+  if (page.after) q = q.where('id', '>', Number(page.after))
+  const raw = await q
+    .orderBy('id')
+    .limit(page.limit + 1)
+    .select<ParticipantRow[]>()
+  const { rows, nextCursor } = takePage(raw, page, r => String(r.id))
   const out: Json[] = []
   for (const p of rows) {
     const schema = await db('credential_schemas').where('id', p.credential_schema_id).first()
@@ -181,7 +241,7 @@ export async function a7(db: Knex, input: { did: string; role?: string }): Promi
       ecosystem: ecosystemRef(ecosystem),
     })
   }
-  return out
+  return { output: out, nextCursor }
 }
 
 async function findCredential(
@@ -236,29 +296,34 @@ export async function b2(db: Knex, input: { did: string; credentialId: string })
 }
 
 // C1 - owned schemas
-export async function c1(db: Knex, input: { ecosystemId: number }): Promise<Json[]> {
+export async function c1(db: Knex, input: { ecosystemId: number }, page: PageReq): Promise<Paged> {
   const eco = await db('ecosystems').where('id', input.ecosystemId).first()
   if (!eco) throw new ApiError('UNKNOWN_ID', `unknown ecosystem ${input.ecosystemId}`)
-  const rows = await db('credential_schemas').where('ecosystem_id', input.ecosystemId).orderBy('id')
-  return rows.map(schemaRef)
+  let q = db('credential_schemas').where('ecosystem_id', input.ecosystemId)
+  if (page.after) q = q.where('id', '>', Number(page.after))
+  const raw = await q.orderBy('id').limit(page.limit + 1)
+  const { rows, nextCursor } = takePage(raw, page, r => String(r.id))
+  return { output: rows.map(schemaRef), nextCursor }
 }
 
 // C2 / D2 - participating DIDs grouped by role; empty role keys are omitted
-async function roleToDids(db: Knex, base: Knex.QueryBuilder): Promise<Json> {
-  const rows = await base.select<(ParticipantRow & DidRow)[]>()
+async function roleToDids(base: Knex.QueryBuilder, page: PageReq): Promise<Paged> {
+  const raw = await base.limit(page.limit + 1).select<(ParticipantRow & DidRow)[]>()
+  const { rows, nextCursor } = takePage(raw, page, r => String(r.id))
   const grouped: Record<string, Json[]> = {}
   for (const row of rows) {
     const role = row.role
     grouped[role] = grouped[role] ?? []
     grouped[role].push({ did: didRef(row), participant: participantRef(row) })
   }
-  return grouped
+  return { output: grouped, nextCursor }
 }
 
 export async function c2(
   db: Knex,
   input: { ecosystemId: number; role?: string; credentialSchemaId?: number },
-): Promise<Json> {
+  page: PageReq,
+): Promise<Paged> {
   const eco = await db('ecosystems').where('id', input.ecosystemId).first('id')
   if (!eco) throw new ApiError('UNKNOWN_ID', `unknown ecosystem ${input.ecosystemId}`)
   let q = db('participants as p')
@@ -266,7 +331,8 @@ export async function c2(
     .where('p.ecosystem_id', input.ecosystemId)
   if (input.role) q = q.where('p.role', input.role)
   if (input.credentialSchemaId !== undefined) q = q.where('p.credential_schema_id', input.credentialSchemaId)
-  return roleToDids(db, q.select('p.*', 'd.*').orderBy('p.id'))
+  if (page.after) q = q.where('p.id', '>', Number(page.after))
+  return roleToDids(q.select('p.*', 'd.*').orderBy('p.id'), page)
 }
 
 // C3 / E3 - governance framework summaries
@@ -277,43 +343,58 @@ export async function c3(db: Knex, input: { ecosystemId: number }): Promise<Json
 }
 
 // D1 - credentials based on a schema
-export async function d1(db: Knex, input: { credentialSchemaId: number }): Promise<Json> {
+export async function d1(db: Knex, input: { credentialSchemaId: number }, page: PageReq): Promise<Paged> {
   const schema = await db('credential_schemas').where('id', input.credentialSchemaId).first('id')
   if (!schema) throw new ApiError('UNKNOWN_ID', `unknown schema ${input.credentialSchemaId}`)
-  const ecs = await validEcs(db('ecs_credentials').where('credential_schema_id', input.credentialSchemaId))
-    .orderBy('id')
-    .select<EcsCredentialRow[]>()
-  const vtcs = await db('vtcs')
-    .where('credential_schema_id', input.credentialSchemaId)
-    .orderBy('id')
-    .select<VtcRow[]>()
-  return { ecsCredentials: ecs.map(ecsCredentialRef), vtcs: vtcs.map(vtcRef) }
+  const { ecs, vtcs, nextCursor } = await fetchDualPage(
+    validEcs(db('ecs_credentials').where('credential_schema_id', input.credentialSchemaId)),
+    db('vtcs').where('credential_schema_id', input.credentialSchemaId),
+    page,
+  )
+  return {
+    output: { ecsCredentials: ecs.map(ecsCredentialRef), vtcs: vtcs.map(vtcRef) },
+    nextCursor,
+  }
 }
 
-export async function d2(db: Knex, input: { credentialSchemaId: number; role?: string }): Promise<Json> {
+export async function d2(
+  db: Knex,
+  input: { credentialSchemaId: number; role?: string },
+  page: PageReq,
+): Promise<Paged> {
   const schema = await db('credential_schemas').where('id', input.credentialSchemaId).first('id')
   if (!schema) throw new ApiError('UNKNOWN_ID', `unknown schema ${input.credentialSchemaId}`)
   let q = db('participants as p')
     .join('dids as d', 'd.did', 'p.did_id')
     .where('p.credential_schema_id', input.credentialSchemaId)
   if (input.role) q = q.where('p.role', input.role)
-  return roleToDids(db, q.select('p.*', 'd.*').orderBy('p.id'))
+  if (page.after) q = q.where('p.id', '>', Number(page.after))
+  return roleToDids(q.select('p.*', 'd.*').orderBy('p.id'), page)
 }
 
 // E1 - DIDs operated by a corporation
-export async function e1(db: Knex, input: { corporationId: number }): Promise<Json[]> {
+export async function e1(db: Knex, input: { corporationId: number }, page: PageReq): Promise<Paged> {
   const corp = await db('corporations').where('id', input.corporationId).first('id')
   if (!corp) throw new ApiError('UNKNOWN_ID', `unknown corporation ${input.corporationId}`)
-  const rows = await db('dids').where('corporation_id', input.corporationId).orderBy('did').select<DidRow[]>()
-  return rows.map(didRef)
+  let q = db('dids').where('corporation_id', input.corporationId)
+  if (page.after) q = q.where('did', '>', page.after)
+  const raw = await q
+    .orderBy('did')
+    .limit(page.limit + 1)
+    .select<DidRow[]>()
+  const { rows, nextCursor } = takePage(raw, page, r => r.did)
+  return { output: rows.map(didRef), nextCursor }
 }
 
 // E2 - ecosystems controlled by a corporation
-export async function e2(db: Knex, input: { corporationId: number }): Promise<Json[]> {
+export async function e2(db: Knex, input: { corporationId: number }, page: PageReq): Promise<Paged> {
   const corp = await db('corporations').where('id', input.corporationId).first('id')
   if (!corp) throw new ApiError('UNKNOWN_ID', `unknown corporation ${input.corporationId}`)
-  const rows = await db('ecosystems').where('corporation_id', input.corporationId).orderBy('id')
-  return rows.map(ecosystemRef)
+  let q = db('ecosystems').where('corporation_id', input.corporationId)
+  if (page.after) q = q.where('id', '>', Number(page.after))
+  const raw = await q.orderBy('id').limit(page.limit + 1)
+  const { rows, nextCursor } = takePage(raw, page, r => String(r.id))
+  return { output: rows.map(ecosystemRef), nextCursor }
 }
 
 export async function e3(db: Knex, input: { corporationId: number }): Promise<Json> {
