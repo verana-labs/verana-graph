@@ -148,6 +148,12 @@ export interface ReadyMessage {
   blockIntervalMs: number
 }
 
+export interface SubscribedMessage {
+  type: 'subscribed'
+  block: number
+  blockTime?: string
+}
+
 export interface BlockMessage {
   type: 'block'
   block: number
