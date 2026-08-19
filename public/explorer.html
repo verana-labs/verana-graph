@@ -369,6 +369,22 @@ main { flex: 1; display: flex; min-height: 0; }
     linkChains();
     if (batch.skipped > 0) toast('showing first ' + nodes.size + ' nodes (cap ' + MAX_NODES + ')');
     if (batch.added > 0) alpha = 1;
+    else if (batch.skipped === 0) toast('nothing new, everything from this expansion is already on the canvas');
+    dirty = true;
+  }
+
+  function fitView() {
+    if (nodes.size === 0) return;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const n of nodes.values()) {
+      minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+      minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+    }
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.max(maxX - minX, 120), h = Math.max(maxY - minY, 120);
+    zoom = Math.min(1.4, Math.min(rect.width / (w + 200), rect.height / (h + 200)));
+    panX = rect.width / 2 - ((minX + maxX) / 2) * zoom;
+    panY = rect.height / 2 - ((minY + maxY) / 2) * zoom;
     dirty = true;
   }
 
@@ -458,6 +474,7 @@ main { flex: 1; display: flex; min-height: 0; }
     let prev = null;
     for (const ref of res.output || []) {
       const pNode = mergeNode(batch, 'Participant', ref.id, ref, prev || node);
+      if (prev && pNode) mergeEdge(prev, pNode, 'chain');
       if (ref.didId) {
         const didNode = mergeNode(batch, 'Did', ref.didId, { did: ref.didId }, pNode || node);
         mergeEdge(pNode, didNode, 'member');
@@ -790,12 +807,18 @@ main { flex: 1; display: flex; min-height: 0; }
       return;
     }
     showCount(res.totalCount);
+    if (res.totalCount === 0) {
+      toast('no results' + (text ? ' for "' + text + '"' : '') + ' on the ' + body.surface + ' surface');
+      return;
+    }
     mergeHits(res.hits || []);
+    fitView();
   }
 
   searchInput.addEventListener('keydown', ev => {
     if (ev.key === 'Enter') runSearch();
   });
+  surfaceSelect.addEventListener('change', runSearch);
 
   async function pollHealth() {
     try {
