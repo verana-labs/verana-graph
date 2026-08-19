@@ -24,6 +24,8 @@ export class MockIndexer {
   // simulates a live gap
   suppressWs = false
   suppressAck = false
+  resolveDelayMs = 0
+  resolveDelayByDid = new Map<string, number>()
 
   constructor(readonly world: MockWorld) {}
 
@@ -55,9 +57,11 @@ export class MockIndexer {
         req.on('data', c => {
           raw += c
         })
-        req.on('end', () => {
+        req.on('end', async () => {
           const did = (JSON.parse(raw) as { did: string }).did
           this.resolveCalls.push({ did, height })
+          const delay = this.resolveDelayByDid.get(did) ?? this.resolveDelayMs
+          if (delay > 0) await new Promise(r => setTimeout(r, delay))
           const snap = this.resolveAt(did, height)
           if (!snap) return json(404, { error: 'unknown did' })
           json(200, snap)
@@ -101,7 +105,7 @@ export class MockIndexer {
         }
         if (control.action !== 'subscribe' || this.suppressAck) return
         const last = this.world.blocks.at(-1)?.block ?? this.world.readyBlock - 1
-        ws.send(JSON.stringify({ type: 'subscribed', block: last + 1 }))
+        ws.send(JSON.stringify({ type: 'subscribed', block: last + 1, blockTime: new Date().toISOString() }))
       })
       ws.send(
         JSON.stringify({
@@ -123,6 +127,11 @@ export class MockIndexer {
 
   get wsUrl(): string {
     return `ws://localhost:${this.port}`
+  }
+
+  dropSockets(): void {
+    for (const ws of this.sockets) ws.terminate()
+    this.sockets.clear()
   }
 
   pushBlock(msg: BlockMessage): void {

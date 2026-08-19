@@ -151,6 +151,7 @@ export interface ReadyMessage {
 export interface SubscribedMessage {
   type: 'subscribed'
   block: number
+  blockTime?: string
 }
 
 export interface BlockMessage {

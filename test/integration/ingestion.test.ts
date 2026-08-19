@@ -45,6 +45,38 @@ describe('ingestion lifecycle', () => {
     })
   }
 
+  it('a gap inside the buffered sequence is replayed, not silently skipped', async () => {
+    mock.resolveDelayMs = 500
+    await orchestrator.start()
+    await waitFor(async () => mock.resolveCalls.length > 0)
+
+    mock.pushBlock(block(100, []))
+    mock.world.snapshots.get(DIDS.issuer)?.set(101, issuerSnapshot(false))
+    mock.suppressWs = true
+    mock.pushBlock(block(101, [{ did: DIDS.issuer, participations: true }]))
+    mock.suppressWs = false
+    mock.pushBlock(block(102, []))
+    expect(await db('ingestion_state').where('id', 1).first()).toBeUndefined()
+    mock.resolveDelayMs = 0
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 102, 20_000)
+    expect(await db('participants').where('id', 11).first()).toBeUndefined()
+  })
+
+  it('a bootstrap superseded by a reconnect never commits its snapshot', async () => {
+    mock.resolveDelayMs = 2500
+    await orchestrator.start()
+    await waitFor(async () => mock.resolveCalls.length > 0)
+
+    mock.resolveDelayMs = 0
+    mock.world.readyBlock = 106
+    mock.dropSockets()
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 105, 20_000)
+    await new Promise(r => setTimeout(r, 2800))
+    expect((await db('ingestion_state').first()).last_applied_block).toBe(105)
+  })
+
   it('TG-INGEST-3: bootstrap anchors on subscribed.block, not ready.block', async () => {
     const world = buildWorld()
     world.blocks.push({ type: 'block', block: 104, blockTime: new Date().toISOString(), changes: [] })
@@ -173,6 +205,55 @@ describe('ingestion lifecycle', () => {
     await waitFor(async () => !(await db('participants').where('id', 11).first()))
     expect(await db('participants').where('id', 12).first()).toBeUndefined()
     expect(await db('participants').where('id', 10).first()).toBeTruthy()
+  })
+
+  function crossDidOnlyWorld(): void {
+    const issuer = structuredClone(issuerSnapshot(true))
+    const p11 = issuer.participations?.find(p => p.id === 11)
+    if (p11) p11.state = 'EXPIRED'
+    issuer.participations = issuer.participations?.filter(p => p.id !== 12)
+    issuer.ecsCredentials = []
+    mock.world.snapshots.get(DIDS.issuer)?.set(0, issuer)
+  }
+
+  it('TG-ACT-1: bootstrap retains a non-ACTIVE participant referenced only by a later resolve', async () => {
+    crossDidOnlyWorld()
+    mock.resolveDelayByDid.set(DIDS.vs, 250)
+
+    await orchestrator.start()
+    await waitFor(async () => {
+      const row = await db('ingestion_state').where('id', 1).first()
+      return row?.last_applied_block === 99
+    })
+
+    const row = await db('participants').where('id', 11).first()
+    expect(row?.state).toBe('EXPIRED')
+  })
+
+  it('TG-ACT-1: a reference created later in the same block keeps the participant alive', async () => {
+    const vsBase = structuredClone(vsSnapshot(false))
+    vsBase.participations = vsBase.participations?.filter(p => p.id !== 21)
+    mock.world.snapshots.get(DIDS.vs)?.set(0, vsBase)
+    await bootstrapped()
+
+    const issuerNext = structuredClone(issuerSnapshot(true))
+    const p11 = issuerNext.participations?.find(p => p.id === 11)
+    if (p11) p11.state = 'EXPIRED'
+    issuerNext.participations = issuerNext.participations?.filter(p => p.id !== 12)
+    issuerNext.ecsCredentials = []
+    mock.world.snapshots.get(DIDS.issuer)?.set(101, issuerNext)
+    mock.world.snapshots.get(DIDS.vs)?.set(101, vsSnapshot(true))
+
+    mock.pushBlock(
+      block(101, [
+        { did: DIDS.issuer, participations: true },
+        { did: DIDS.vs, participations: true, presentations: true },
+      ]),
+    )
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 101)
+    const row = await db('participants').where('id', 11).first()
+    expect(row?.state).toBe('EXPIRED')
   })
 
   it('TG-ACT-1: an unreferenced non-ACTIVE entry is never persisted', async () => {

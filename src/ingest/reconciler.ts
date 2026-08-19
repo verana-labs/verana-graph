@@ -77,7 +77,6 @@ export async function reconcile(
   await upsertEcsCredentials(trx, response, evidence)
   await upsertDid(trx, response, evidence)
   await refreshDependentDids(trx, did, evidence)
-  await sweepUnreferencedParticipants(trx)
   return schemaLoads
 }
 
@@ -440,6 +439,7 @@ export async function repairDerivedFacets(db: Knex): Promise<void> {
     UPDATE dids SET schema_text = sub.text FROM (
       SELECT p.did_id, string_agg(DISTINCT concat_ws(' ', cs.title, cs.description), ' ') AS text
       FROM participants p JOIN credential_schemas cs ON cs.id = p.credential_schema_id
+      WHERE p.state = 'ACTIVE'
       GROUP BY p.did_id
     ) sub WHERE dids.did = sub.did_id
   `)

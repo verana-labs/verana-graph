@@ -265,7 +265,6 @@ export async function b1(db: Knex, input: { did: string; credentialId: string })
     .where('id', found.row.issuer_participant_id)
     .first<ParticipantRow | undefined>()
   if (!issuer) {
-    // the ISSUED_BY target left ACTIVE and was hard-deleted per TG-ACT-1
     throw new ApiError('UNKNOWN_ID', `unknown issuer participant ${found.row.issuer_participant_id}`)
   }
   const schema = await db('credential_schemas').where('id', found.row.credential_schema_id).first()
