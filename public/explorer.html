@@ -57,6 +57,34 @@ body {
 main { flex: 1; display: flex; min-height: 0; }
 #stage { flex: 1; position: relative; min-width: 0; }
 #canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+#toolbar {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 4;
+}
+#toolbar button {
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid #334155;
+  color: #cbd5e1;
+  font: inherit;
+  font-size: 12px;
+  border-radius: 6px;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+#toolbar button:hover { border-color: #64748b; color: #f1f5f9; }
+#stats {
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 5px 11px;
+  font-size: 12px;
+  color: #64748b;
+}
 #legend {
   position: absolute;
   left: 14px;
@@ -74,6 +102,21 @@ main { flex: 1; display: flex; min-height: 0; }
 #legend .row { display: flex; align-items: center; gap: 8px; }
 #legend .swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 #legend .line { width: 22px; height: 0; flex: none; }
+#tooltip {
+  position: absolute;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 6;
+  max-width: 320px;
+  word-break: break-all;
+  display: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+#tooltip .tkind { color: #94a3b8; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; }
 #toasts {
   position: absolute;
   top: 14px;
@@ -107,7 +150,7 @@ main { flex: 1; display: flex; min-height: 0; }
   padding: 0;
 }
 #panel {
-  width: 330px;
+  width: 340px;
   flex: none;
   background: #0f172a;
   border-left: 1px solid #1e293b;
@@ -115,7 +158,8 @@ main { flex: 1; display: flex; min-height: 0; }
   padding: 16px;
 }
 #panel-empty { color: #64748b; font-size: 13px; margin-top: 8px; }
-#panel-kind {
+#panel-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.chip {
   display: inline-block;
   font-size: 11px;
   text-transform: uppercase;
@@ -124,25 +168,90 @@ main { flex: 1; display: flex; min-height: 0; }
   background: #1e293b;
   border-radius: 4px;
   padding: 2px 8px;
-  margin-bottom: 8px;
 }
-#panel-title { font-size: 14px; font-weight: 600; word-break: break-all; margin-bottom: 12px; }
-#panel-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.badge.green { background: #14351f; color: #4ade80; }
+.badge.red { background: #3b1620; color: #f87171; }
+.badge.amber { background: #392c10; color: #fbbf24; }
+.badge.gray { background: #1e293b; color: #94a3b8; }
+#panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  word-break: break-all;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+#panel-actions { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 #panel-actions button {
-  background: #1d4ed8;
-  border: none;
-  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: #16233d;
+  border: 1px solid #27344f;
+  color: #dbe6ff;
   font: inherit;
   font-size: 12.5px;
   border-radius: 6px;
-  padding: 6px 11px;
+  padding: 7px 11px;
   cursor: pointer;
 }
-#panel-actions button:hover { background: #2563eb; }
-#panel-actions button:disabled { background: #334155; color: #94a3b8; cursor: default; }
-#panel-fields { font-size: 12.5px; }
-#panel-fields dt { color: #94a3b8; margin-top: 8px; }
-#panel-fields dd { color: #e2e8f0; word-break: break-all; }
+#panel-actions button:hover { border-color: #3b82f6; }
+#panel-actions button:disabled { opacity: 0.55; cursor: default; }
+#panel-actions .chev { color: #64748b; font-size: 11px; width: 10px; flex: none; }
+#panel-actions .grpcount { margin-left: auto; color: #64748b; font-size: 11.5px; }
+#panel-actions button.expanded { border-color: #1d4ed8; background: #12213f; }
+#panel-actions button.loading .chev { animation: spin 0.8s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.section { margin-bottom: 4px; }
+.section h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #64748b;
+  margin: 14px 0 6px;
+}
+.frow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 12.5px;
+}
+.frow .fl { color: #94a3b8; flex: none; width: 118px; }
+.frow .fv { color: #e2e8f0; word-break: break-all; min-width: 0; }
+.frow .fv.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+.copybtn {
+  background: none;
+  border: none;
+  color: #475569;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 2px;
+  flex: none;
+}
+.copybtn:hover { color: #94a3b8; }
+#panel details { margin-top: 16px; }
+#panel summary { color: #64748b; font-size: 12px; cursor: pointer; }
+#panel pre {
+  margin-top: 8px;
+  background: #0b1120;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 11px;
+  overflow-x: auto;
+  color: #cbd5e1;
+}
 </style>
 </head>
 <body>
@@ -155,13 +264,18 @@ main { flex: 1; display: flex; min-height: 0; }
     <option>CredentialSchema</option>
     <option>ServiceEndpoint</option>
   </select>
-  <input id="search" type="search" placeholder="Search the graph, press Enter" autocomplete="off">
+  <input id="search" type="search" placeholder="Search the graph, press Enter ( / to focus )" autocomplete="off">
   <span id="count"></span>
   <div id="health"><span class="dot"></span><span id="health-text">connecting</span></div>
 </header>
 <main>
   <div id="stage">
     <canvas id="canvas"></canvas>
+    <div id="toolbar">
+      <button id="btn-fit" title="Fit all nodes in view">Fit</button>
+      <button id="btn-clear" title="Reset the canvas to the initial view">Reset</button>
+      <span id="stats"></span>
+    </div>
     <div id="legend">
       <div class="row"><span class="swatch" style="background:#a78bfa"></span>Ecosystem</div>
       <div class="row"><span class="swatch" style="background:#60a5fa"></span>Corporation</div>
@@ -169,18 +283,20 @@ main { flex: 1; display: flex; min-height: 0; }
       <div class="row"><span class="swatch" style="background:#4ade80"></span>Participant ACTIVE</div>
       <div class="row"><span class="swatch" style="background:#f87171"></span>Participant REVOKED / SLASHED</div>
       <div class="row"><span class="swatch" style="background:#fbbf24"></span>Participant other state</div>
-      <div class="row"><span class="line" style="border-top:2px solid #cbd5e1"></span>validator chain</div>
+      <div class="row"><span class="line" style="border-top:2px solid #cbd5e1"></span>validator chain (arrow to validator)</div>
       <div class="row"><span class="line" style="border-top:1px dashed #64748b"></span>membership / ownership</div>
     </div>
+    <div id="tooltip"></div>
     <div id="toasts"></div>
   </div>
   <aside id="panel">
-    <div id="panel-empty">Click a node to inspect it. Drag a node to pin it, double-click to unpin. Drag the background to pan, scroll to zoom.</div>
+    <div id="panel-empty">Click a node to inspect it. Expansion buttons toggle: click once to expand, again to collapse. Drag a node to pin it, double-click to unpin. Drag the background to pan, scroll to zoom, Esc to deselect.</div>
     <div id="panel-body" hidden>
-      <div id="panel-kind"></div>
+      <div id="panel-head"></div>
       <h2 id="panel-title"></h2>
       <div id="panel-actions"></div>
-      <dl id="panel-fields"></dl>
+      <div id="panel-sections"></div>
+      <details><summary>Raw data</summary><pre id="panel-raw"></pre></details>
     </div>
   </aside>
 </main>
@@ -198,10 +314,13 @@ main { flex: 1; display: flex; min-height: 0; }
     other: '#94a3b8',
   };
   const RADII = { Ecosystem: 13, Corporation: 11, Did: 8, Participant: 7 };
+  const ROOT_GROUP = 'root';
 
   const nodes = new Map();
   const edges = new Map();
+  const groups = new Map();
   let selected = null;
+  let hovered = null;
   let alpha = 0;
   let dirty = true;
 
@@ -210,8 +329,10 @@ main { flex: 1; display: flex; min-height: 0; }
   const searchInput = document.getElementById('search');
   const surfaceSelect = document.getElementById('surface');
   const countEl = document.getElementById('count');
+  const statsEl = document.getElementById('stats');
   const healthEl = document.getElementById('health');
   const healthText = document.getElementById('health-text');
+  const tooltipEl = document.getElementById('tooltip');
 
   let dpr = 1;
   let width = 0;
@@ -308,8 +429,17 @@ main { flex: 1; display: flex; min-height: 0; }
     return api('/v4/graph/traverse', body);
   }
 
-  function beginBatch() {
-    return { added: 0, skipped: 0 };
+  function ensureGroup(gid, label) {
+    let g = groups.get(gid);
+    if (!g) {
+      g = { id: gid, label, nodes: new Set(), edges: new Set() };
+      groups.set(gid, g);
+    }
+    return g;
+  }
+
+  function beginBatch(gid, label) {
+    return { gid, group: ensureGroup(gid, label), added: 0, touched: 0, skipped: 0 };
   }
 
   function mergeNode(batch, kind, id, data, anchor) {
@@ -318,6 +448,9 @@ main { flex: 1; display: flex; min-height: 0; }
     if (existing) {
       if (data) Object.assign(existing.data, data);
       existing.label = nodeLabel(existing);
+      existing.groups.add(batch.gid);
+      batch.group.nodes.add(key);
+      batch.touched += 1;
       return existing;
     }
     if (nodes.size >= MAX_NODES) {
@@ -332,6 +465,7 @@ main { flex: 1; display: flex; min-height: 0; }
       kind,
       id,
       data: data ? { ...data } : {},
+      groups: new Set([batch.gid]),
       x: base.x + Math.cos(ang) * rad,
       y: base.y + Math.sin(ang) * rad,
       vx: 0,
@@ -344,16 +478,27 @@ main { flex: 1; display: flex; min-height: 0; }
     };
     n.label = nodeLabel(n);
     nodes.set(key, n);
+    batch.group.nodes.add(key);
     batch.added += 1;
+    batch.touched += 1;
     return n;
   }
 
-  function mergeEdge(a, b, kind) {
+  function mergeEdge(a, b, kind, batch) {
     if (!a || !b || a === b) return;
     const k1 = a.key + '|' + b.key + '|' + kind;
     const k2 = b.key + '|' + a.key + '|' + kind;
-    if (edges.has(k1) || edges.has(k2)) return;
-    edges.set(k1, { a, b, kind });
+    const key = edges.has(k2) ? k2 : k1;
+    let e = edges.get(key);
+    if (!e) {
+      e = { a, b, kind, groups: new Set() };
+      edges.set(key, e);
+    }
+    if (batch) {
+      e.groups.add(batch.gid);
+      batch.group.edges.add(key);
+    }
+    return e;
   }
 
   function linkChains() {
@@ -361,16 +506,56 @@ main { flex: 1; display: flex; min-height: 0; }
       if (n.kind !== 'Participant') continue;
       const v = n.data.validatorParticipantId;
       if (v === null || v === undefined) continue;
-      mergeEdge(n, nodes.get('Participant:' + v), 'chain');
+      mergeEdge(n, nodes.get('Participant:' + v), 'chain', null);
     }
+  }
+
+  function removeNode(n) {
+    nodes.delete(n.key);
+    for (const [k, e] of edges) {
+      if (e.a === n || e.b === n) edges.delete(k);
+    }
+    for (const g of groups.values()) g.nodes.delete(n.key);
+    if (selected === n) select(null);
+    if (hovered === n) hovered = null;
+  }
+
+  function collapseGroup(gid) {
+    const g = groups.get(gid);
+    if (!g) return 0;
+    for (const ek of g.edges) {
+      const e = edges.get(ek);
+      if (!e) continue;
+      e.groups.delete(gid);
+      if (e.groups.size === 0 && e.kind !== 'chain') edges.delete(ek);
+    }
+    let removed = 0;
+    for (const nk of [...g.nodes]) {
+      const n = nodes.get(nk);
+      if (!n) continue;
+      n.groups.delete(gid);
+      if (n.groups.size === 0) {
+        removeNode(n);
+        removed += 1;
+      }
+    }
+    groups.delete(gid);
+    alpha = Math.max(alpha, 0.6);
+    dirty = true;
+    updateStats();
+    return removed;
   }
 
   function endBatch(batch) {
     linkChains();
     if (batch.skipped > 0) toast('showing first ' + nodes.size + ' nodes (cap ' + MAX_NODES + ')');
     if (batch.added > 0) alpha = 1;
-    else if (batch.skipped === 0) toast('nothing new, everything from this expansion is already on the canvas');
     dirty = true;
+    updateStats();
+  }
+
+  function updateStats() {
+    statsEl.textContent = nodes.size + ' nodes · ' + edges.size + ' edges';
   }
 
   function fitView() {
@@ -388,112 +573,266 @@ main { flex: 1; display: flex; min-height: 0; }
     dirty = true;
   }
 
-  function fieldValue(v) {
-    if (v === null || v === undefined) return 'null';
-    if (typeof v === 'object') {
-      const s = JSON.stringify(v);
-      return s.length > 160 ? s.slice(0, 160) + '…' : s;
-    }
-    return String(v);
-  }
-
-  async function expandEcosystemMembers(node) {
+  async function expandEcosystemMembers(node, batch) {
     const res = await traverse('C2', { ecosystemId: node.id }, 100);
-    const batch = beginBatch();
-    for (const items of Object.values(res.output || {})) {
-      for (const item of items) {
-        const didNode = mergeNode(batch, 'Did', item.did.did, item.did, node);
-        mergeEdge(node, didNode, 'member');
-        const pNode = mergeNode(batch, 'Participant', item.participant.id, item.participant, didNode || node);
-        mergeEdge(didNode, pNode, 'member');
+    const out = res.output || {};
+    for (const list of Object.values(out)) {
+      for (const entry of list || []) {
+        const didData = entry.did || {};
+        const didNode = didData.did ? mergeNode(batch, 'Did', didData.did, didData, node) : null;
+        if (didNode) mergeEdge(node, didNode, 'member', batch);
+        if (entry.participant) {
+          const pNode = mergeNode(batch, 'Participant', entry.participant.id, entry.participant, didNode || node);
+          mergeEdge(didNode || node, pNode, 'member', batch);
+        }
       }
     }
-    endBatch(batch);
   }
 
-  async function expandDidTrust(node) {
+  async function expandDidTrust(node, batch) {
     const res = await traverse('A1', { did: node.id });
     Object.assign(node.data, res.output || {});
     node.label = nodeLabel(node);
-    const batch = beginBatch();
     const corpId = node.data.corporationId;
     if (corpId !== null && corpId !== undefined) {
       const corp = mergeNode(batch, 'Corporation', corpId, { id: corpId }, node);
-      mergeEdge(node, corp, 'member');
+      mergeEdge(node, corp, 'member', batch);
     }
-    endBatch(batch);
   }
 
-  async function expandDidParticipants(node) {
+  async function expandDidParticipants(node, batch) {
     const res = await traverse('A7', { did: node.id }, 100);
-    const batch = beginBatch();
     for (const item of res.output || []) {
       const data = { ...item.participant };
       if (item.schema && item.schema.title) data.schemaTitle = item.schema.title;
       const pNode = mergeNode(batch, 'Participant', item.participant.id, data, node);
-      mergeEdge(node, pNode, 'member');
+      mergeEdge(node, pNode, 'member', batch);
       if (item.ecosystem) {
         const eNode = mergeNode(batch, 'Ecosystem', item.ecosystem.id, item.ecosystem, pNode || node);
-        mergeEdge(pNode, eNode, 'member');
+        mergeEdge(pNode, eNode, 'member', batch);
       }
     }
-    endBatch(batch);
   }
 
-  async function expandDidGoverning(node) {
+  async function expandDidGoverning(node, batch) {
     const res = await traverse('A2', { did: node.id });
     const out = res.output || {};
-    const batch = beginBatch();
     if (out.corporation) {
       const corp = mergeNode(batch, 'Corporation', out.corporation.id, out.corporation, node);
-      mergeEdge(node, corp, 'member');
+      mergeEdge(node, corp, 'member', batch);
     }
     for (const eco of out.ecosystems || []) {
       const eNode = mergeNode(batch, 'Ecosystem', eco.id, eco, node);
-      mergeEdge(node, eNode, 'member');
+      mergeEdge(node, eNode, 'member', batch);
       if (eco.corporationId !== null && eco.corporationId !== undefined) {
-        mergeEdge(eNode, nodes.get('Corporation:' + eco.corporationId), 'member');
+        mergeEdge(eNode, nodes.get('Corporation:' + eco.corporationId), 'member', batch);
       }
     }
-    endBatch(batch);
   }
 
-  async function expandCorporationDids(node) {
+  async function expandCorporationDids(node, batch) {
     const res = await traverse('E1', { corporationId: node.id }, 100);
-    const batch = beginBatch();
     for (const ref of res.output || []) {
       const didNode = mergeNode(batch, 'Did', ref.did, ref, node);
-      mergeEdge(node, didNode, 'member');
+      mergeEdge(node, didNode, 'member', batch);
     }
-    endBatch(batch);
   }
 
-  async function expandParticipantChain(node) {
+  async function expandParticipantChain(node, batch) {
     const res = await traverse('G1', { participantId: node.id });
-    const batch = beginBatch();
     let prev = null;
     for (const ref of res.output || []) {
       const pNode = mergeNode(batch, 'Participant', ref.id, ref, prev || node);
-      if (prev && pNode) mergeEdge(prev, pNode, 'chain');
+      if (prev && pNode) mergeEdge(pNode, prev, 'chain', batch);
       if (ref.didId) {
         const didNode = mergeNode(batch, 'Did', ref.didId, { did: ref.didId }, pNode || node);
-        mergeEdge(pNode, didNode, 'member');
+        mergeEdge(pNode, didNode, 'member', batch);
       }
       prev = pNode || prev;
     }
-    endBatch(batch);
   }
 
   const EXPANSIONS = {
-    Ecosystem: [{ label: 'Members (C2)', run: expandEcosystemMembers }],
+    Ecosystem: [{ op: 'C2', label: 'Members', run: expandEcosystemMembers }],
     Did: [
-      { label: 'Trust summary (A1)', run: expandDidTrust },
-      { label: 'Participants (A7)', run: expandDidParticipants },
-      { label: 'Governing chain (A2)', run: expandDidGoverning },
+      { op: 'A1', label: 'Trust summary', run: expandDidTrust },
+      { op: 'A7', label: 'Participants', run: expandDidParticipants },
+      { op: 'A2', label: 'Governing chain', run: expandDidGoverning },
     ],
-    Corporation: [{ label: 'DIDs (E1)', run: expandCorporationDids }],
-    Participant: [{ label: 'Validator chain (G1)', run: expandParticipantChain }],
+    Corporation: [{ op: 'E1', label: 'Operated DIDs', run: expandCorporationDids }],
+    Participant: [{ op: 'G1', label: 'Validator chain', run: expandParticipantChain }],
   };
+
+  const inflight = new Set();
+
+  async function toggleExpansion(node, exp, btn) {
+    const gid = node.key + '|' + exp.op;
+    if (inflight.has(gid)) return;
+    if (groups.has(gid)) {
+      const removed = collapseGroup(gid);
+      if (removed === 0) toast('collapsed, every node in this expansion is still referenced elsewhere');
+      if (selected === node) renderPanel();
+      return;
+    }
+    inflight.add(gid);
+    btn.disabled = true;
+    btn.classList.add('loading');
+    try {
+      const batch = beginBatch(gid, exp.label);
+      await exp.run(node, batch);
+      endBatch(batch);
+      if (batch.touched === 0) {
+        groups.delete(gid);
+        toast('this expansion has nothing to show');
+      }
+    } catch (e) {
+      groups.delete(gid);
+      toast(errMsg(e));
+    }
+    inflight.delete(gid);
+    if (selected === node) renderPanel();
+  }
+
+  const STATE_BADGE = { ACTIVE: 'green', REVOKED: 'red', SLASHED: 'red' };
+
+  function fmtTime(v) {
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return String(v);
+    return d.toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC').replace('Z', ' UTC');
+  }
+
+  function fmtAmount(v) {
+    const m = String(v).match(/^(\d+)([a-z]+)$/);
+    if (!m) return String(v);
+    return Number(m[1]).toLocaleString('en-US') + ' ' + m[2];
+  }
+
+  function row(label, value, opts) {
+    if (value === null || value === undefined || value === '') return null;
+    return { label, value, ...(opts || {}) };
+  }
+
+  const PANEL_SECTIONS = {
+    Did: d => [
+      ['Identity', [
+        row('DID', d.did, { mono: true, copy: true }),
+        row('Corporation', d.corporationId),
+        row('Pattern', d.pattern),
+      ]],
+      ['Trust', [
+        row('Trusted', d.trusted, { bool: true }),
+        row('Trust expired', d.isTrustExpired, { bool: true }),
+        row('Evaluated at', d.evaluatedAtTime, { time: true }),
+        row('Evaluated block', d.evaluatedAtBlock),
+        row('Expires', d.expiresAtTime, { time: true }),
+      ]],
+      ['Observed', [row('Last observed', d.lastObservedAtTime, { time: true })]],
+    ],
+    Participant: d => [
+      ['Participation', [
+        row('Role', d.role),
+        row('State', d.state, { state: true }),
+        row('Schema', d.schemaTitle ? d.schemaTitle + ' (' + d.credentialSchemaId + ')' : d.credentialSchemaId),
+        row('Ecosystem', d.ecosystemId),
+        row('Validator', d.validatorParticipantId),
+      ]],
+      ['Identity', [
+        row('DID', d.didId, { mono: true, copy: true }),
+        row('Operator', d.vsOperator, { mono: true, copy: true }),
+      ]],
+      ['Economics', [
+        row('Trust deposit', d.weight, { amount: true }),
+        row('Issued credentials', d.issuedCredentials),
+        row('Verified credentials', d.verifiedCredentials),
+      ]],
+      ['Observed', [row('Last observed', d.lastObservedAtTime, { time: true })]],
+    ],
+    Ecosystem: d => [
+      ['Overview', [
+        row('Id', d.id),
+        row('DID', d.did, { mono: true, copy: true }),
+        row('Corporation', d.corporationId),
+        row('Archived', d.archived, { bool: true }),
+      ]],
+      ['Observed', [row('Last observed', d.lastObservedAtTime, { time: true })]],
+    ],
+    Corporation: d => [
+      ['Overview', [
+        row('Id', d.id),
+        row('Policy address', d.policyAddress, { mono: true, copy: true }),
+        row('Deposit', d.deposit, { amount: true }),
+        row('Slashed events', d.slashedEvents),
+      ]],
+    ],
+    CredentialSchema: d => [
+      ['Overview', [
+        row('Id', d.id),
+        row('Title', d.title),
+        row('Description', d.description),
+        row('Type', d.type),
+        row('Ecosystem', d.ecosystemId),
+        row('Archived', d.archived, { bool: true }),
+        row('Digest', d.digestSri, { mono: true, copy: true }),
+      ]],
+    ],
+  };
+
+  function badgeFor(n) {
+    if (n.kind === 'Participant' && n.data.state) {
+      return { text: n.data.state, cls: STATE_BADGE[n.data.state] || 'amber' };
+    }
+    if (n.kind === 'Did' && n.data.trusted !== undefined) {
+      return n.data.trusted
+        ? { text: 'TRUSTED', cls: 'green' }
+        : { text: 'UNTRUSTED', cls: 'gray' };
+    }
+    if (n.data.archived === true) return { text: 'ARCHIVED', cls: 'amber' };
+    return null;
+  }
+
+  function copyButton(value) {
+    const b = document.createElement('button');
+    b.className = 'copybtn';
+    b.textContent = 'copy';
+    b.title = 'Copy to clipboard';
+    b.addEventListener('click', () => {
+      navigator.clipboard.writeText(String(value)).then(
+        () => { b.textContent = 'copied'; setTimeout(() => { b.textContent = 'copy'; }, 1200); },
+        () => toast('could not copy'),
+      );
+    });
+    return b;
+  }
+
+  function renderRow(r) {
+    const div = document.createElement('div');
+    div.className = 'frow';
+    const fl = document.createElement('span');
+    fl.className = 'fl';
+    fl.textContent = r.label;
+    const fv = document.createElement('span');
+    fv.className = 'fv' + (r.mono ? ' mono' : '');
+    if (r.state) {
+      const b = document.createElement('span');
+      b.className = 'badge ' + (STATE_BADGE[r.value] || 'amber');
+      b.textContent = r.value;
+      fv.appendChild(b);
+    } else if (r.bool) {
+      const b = document.createElement('span');
+      b.className = 'badge ' + (r.value === true ? 'green' : 'gray');
+      b.textContent = r.value === true ? 'yes' : 'no';
+      fv.appendChild(b);
+    } else if (r.time) {
+      fv.textContent = fmtTime(r.value);
+    } else if (r.amount) {
+      fv.textContent = fmtAmount(r.value);
+    } else {
+      fv.textContent = String(r.value);
+    }
+    div.append(fl, fv);
+    if (r.copy) div.appendChild(copyButton(r.value));
+    return div;
+  }
 
   function renderPanel() {
     const empty = document.getElementById('panel-empty');
@@ -505,36 +844,96 @@ main { flex: 1; display: flex; min-height: 0; }
     }
     empty.hidden = true;
     body.hidden = false;
-    document.getElementById('panel-kind').textContent = selected.kind;
-    document.getElementById('panel-title').textContent =
-      selected.kind === 'Did' ? String(selected.id) : selected.label;
+    const node = selected;
+
+    const head = document.getElementById('panel-head');
+    head.replaceChildren();
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = node.kind;
+    head.appendChild(chip);
+    const badge = badgeFor(node);
+    if (badge) {
+      const b = document.createElement('span');
+      b.className = 'badge ' + badge.cls;
+      b.textContent = badge.text;
+      head.appendChild(b);
+    }
+
+    const title = document.getElementById('panel-title');
+    title.replaceChildren();
+    const titleText = document.createElement('span');
+    titleText.textContent = node.kind === 'Did' ? String(node.id) : node.label;
+    title.appendChild(titleText);
+    if (node.kind === 'Did') title.appendChild(copyButton(node.id));
+
     const actions = document.getElementById('panel-actions');
     actions.replaceChildren();
-    const node = selected;
     for (const exp of EXPANSIONS[node.kind] || []) {
+      const gid = node.key + '|' + exp.op;
+      const g = groups.get(gid);
       const btn = document.createElement('button');
-      btn.textContent = exp.label;
-      btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        try {
-          await exp.run(node);
-        } catch (e) {
-          toast(errMsg(e));
-        }
-        btn.disabled = false;
-        if (selected === node) renderPanel();
-      });
+      if (g) btn.classList.add('expanded');
+      const chev = document.createElement('span');
+      chev.className = 'chev';
+      chev.textContent = g ? '▾' : '▸';
+      const lbl = document.createElement('span');
+      lbl.textContent = exp.label + ' (' + exp.op + ')';
+      btn.append(chev, lbl);
+      if (g) {
+        const cnt = document.createElement('span');
+        cnt.className = 'grpcount';
+        cnt.textContent = g.nodes.size + ' nodes';
+        btn.appendChild(cnt);
+      }
+      btn.title = g ? 'Collapse this expansion' : 'Run ' + exp.op + ' and expand the result';
+      btn.addEventListener('click', () => toggleExpansion(node, exp, btn));
       actions.appendChild(btn);
     }
-    const dl = document.getElementById('panel-fields');
-    dl.replaceChildren();
-    for (const [k, v] of Object.entries(node.data)) {
-      const dt = document.createElement('dt');
-      dt.textContent = k;
-      const dd = document.createElement('dd');
-      dd.textContent = fieldValue(v);
-      dl.append(dt, dd);
+
+    const sectionsEl = document.getElementById('panel-sections');
+    sectionsEl.replaceChildren();
+    const build = PANEL_SECTIONS[node.kind];
+    const consumed = new Set();
+    if (build) {
+      for (const [name, rows] of build(node.data)) {
+        const present = rows.filter(Boolean);
+        if (present.length === 0) continue;
+        const sec = document.createElement('div');
+        sec.className = 'section';
+        const h = document.createElement('h3');
+        h.textContent = name;
+        sec.appendChild(h);
+        for (const r of present) sec.appendChild(renderRow(r));
+        sectionsEl.appendChild(sec);
+      }
+      const KNOWN = {
+        Did: ['did', 'corporationId', 'pattern', 'trusted', 'isTrustExpired', 'evaluatedAtTime', 'evaluatedAtBlock', 'expiresAtTime', 'lastObservedAtTime'],
+        Participant: ['id', 'role', 'state', 'schemaTitle', 'credentialSchemaId', 'ecosystemId', 'validatorParticipantId', 'didId', 'vsOperator', 'weight', 'issuedCredentials', 'verifiedCredentials', 'lastObservedAtTime'],
+        Ecosystem: ['id', 'did', 'corporationId', 'archived', 'lastObservedAtTime'],
+        Corporation: ['id', 'policyAddress', 'deposit', 'slashedEvents'],
+        CredentialSchema: ['id', 'title', 'description', 'type', 'ecosystemId', 'archived', 'digestSri'],
+      };
+      for (const k of KNOWN[node.kind] || []) consumed.add(k);
     }
+    const rest = Object.entries(node.data).filter(
+      ([k, v]) => !consumed.has(k) && v !== null && v !== undefined && typeof v !== 'object',
+    );
+    if (rest.length > 0 || !build) {
+      const sec = document.createElement('div');
+      sec.className = 'section';
+      const h = document.createElement('h3');
+      h.textContent = build ? 'Other' : 'Fields';
+      sec.appendChild(h);
+      const entries = build ? rest : Object.entries(node.data).filter(([, v]) => typeof v !== 'object');
+      for (const [k, v] of entries) {
+        const r = row(k, v);
+        if (r) sec.appendChild(renderRow(r));
+      }
+      if (sec.childNodes.length > 1) sectionsEl.appendChild(sec);
+    }
+
+    document.getElementById('panel-raw').textContent = JSON.stringify(node.data, null, 2);
   }
 
   function select(n) {
@@ -567,6 +966,27 @@ main { flex: 1; display: flex; min-height: 0; }
     return best;
   }
 
+  function setHover(n, cx, cy) {
+    if (hovered !== n) {
+      hovered = n;
+      dirty = true;
+    }
+    if (!n) {
+      tooltipEl.style.display = 'none';
+      return;
+    }
+    tooltipEl.replaceChildren();
+    const k = document.createElement('div');
+    k.className = 'tkind';
+    k.textContent = n.kind;
+    const t = document.createElement('div');
+    t.textContent = n.kind === 'Did' ? String(n.id) : n.label;
+    tooltipEl.append(k, t);
+    tooltipEl.style.display = 'block';
+    tooltipEl.style.left = Math.min(cx + 14, width - 330) + 'px';
+    tooltipEl.style.top = cy + 14 + 'px';
+  }
+
   canvas.addEventListener('pointerdown', ev => {
     canvas.setPointerCapture(ev.pointerId);
     pointerDown = true;
@@ -584,9 +1004,12 @@ main { flex: 1; display: flex; min-height: 0; }
     const x = ev.offsetX;
     const y = ev.offsetY;
     if (!pointerDown) {
-      canvas.style.cursor = pick(x, y) ? 'pointer' : 'grab';
+      const n = pick(x, y);
+      canvas.style.cursor = n ? 'pointer' : 'grab';
+      setHover(n, x, y);
       return;
     }
+    setHover(null, 0, 0);
     if (Math.hypot(x - downX, y - downY) > 4) moved = true;
     if (dragNode && moved) {
       const w = toWorld(x, y);
@@ -614,6 +1037,8 @@ main { flex: 1; display: flex; min-height: 0; }
     canvas.style.cursor = 'grab';
   });
 
+  canvas.addEventListener('pointerleave', () => setHover(null, 0, 0));
+
   canvas.addEventListener('dblclick', ev => {
     const n = pick(ev.offsetX, ev.offsetY);
     if (n && n.pinned) {
@@ -638,6 +1063,17 @@ main { flex: 1; display: flex; min-height: 0; }
     },
     { passive: false },
   );
+
+  window.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape') {
+      select(null);
+      return;
+    }
+    if (ev.key === '/' && document.activeElement !== searchInput) {
+      ev.preventDefault();
+      searchInput.focus();
+    }
+  });
 
   function simStep() {
     const arr = [...nodes.values()];
@@ -698,14 +1134,14 @@ main { flex: 1; display: flex; min-height: 0; }
     alpha = alpha < 0.015 ? 0 : alpha * 0.99;
   }
 
-  function drawEdges(kind) {
-    ctx.beginPath();
+  function neighborhood() {
+    if (!selected) return null;
+    const set = new Set([selected]);
     for (const e of edges.values()) {
-      if (e.kind !== kind) continue;
-      ctx.moveTo(e.a.x, e.a.y);
-      ctx.lineTo(e.b.x, e.b.y);
+      if (e.a === selected) set.add(e.b);
+      if (e.b === selected) set.add(e.a);
     }
-    ctx.stroke();
+    return set;
   }
 
   function draw() {
@@ -713,24 +1149,68 @@ main { flex: 1; display: flex; min-height: 0; }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#0b1120';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (nodes.size === 0) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.font = '13px ui-sans-serif, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#475569';
+      ctx.fillText('Search above or switch the surface to load the graph', width / 2, height / 2);
+      return;
+    }
+
+    const hood = neighborhood();
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * panX, dpr * panY);
 
-    ctx.lineWidth = 1 / zoom;
-    ctx.strokeStyle = 'rgba(100, 116, 139, 0.45)';
-    ctx.setLineDash([5 / zoom, 5 / zoom]);
-    drawEdges('member');
-    ctx.setLineDash([]);
-    ctx.lineWidth = 1.6 / zoom;
-    ctx.strokeStyle = 'rgba(203, 213, 225, 0.85)';
-    drawEdges('chain');
+    for (const pass of ['member', 'chain']) {
+      for (const e of edges.values()) {
+        if (e.kind !== pass) continue;
+        const inHood = !hood || e.a === selected || e.b === selected;
+        ctx.globalAlpha = inHood ? 1 : 0.15;
+        ctx.beginPath();
+        ctx.moveTo(e.a.x, e.a.y);
+        ctx.lineTo(e.b.x, e.b.y);
+        if (pass === 'member') {
+          ctx.lineWidth = 1 / zoom;
+          ctx.strokeStyle = 'rgba(100, 116, 139, 0.45)';
+          ctx.setLineDash([5 / zoom, 5 / zoom]);
+        } else {
+          ctx.lineWidth = 1.6 / zoom;
+          ctx.strokeStyle = 'rgba(203, 213, 225, 0.85)';
+          ctx.setLineDash([]);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (pass === 'chain') {
+          const dx = e.b.x - e.a.x;
+          const dy = e.b.y - e.a.y;
+          const d = Math.hypot(dx, dy) || 1;
+          const ux = dx / d;
+          const uy = dy / d;
+          const tipX = e.b.x - ux * (e.b.r + 3 / zoom);
+          const tipY = e.b.y - uy * (e.b.r + 3 / zoom);
+          const s = 5 / zoom;
+          ctx.beginPath();
+          ctx.moveTo(tipX, tipY);
+          ctx.lineTo(tipX - ux * s * 1.8 + uy * s, tipY - uy * s * 1.8 - ux * s);
+          ctx.lineTo(tipX - ux * s * 1.8 - uy * s, tipY - uy * s * 1.8 + ux * s);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(203, 213, 225, 0.85)';
+          ctx.fill();
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
 
     for (const n of nodes.values()) {
+      const inHood = !hood || hood.has(n);
+      ctx.globalAlpha = inHood ? 1 : 0.25;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
       ctx.fillStyle = nodeColor(n);
       ctx.fill();
       ctx.lineWidth = 1 / zoom;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+      ctx.strokeStyle = n === hovered ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.25)';
       ctx.stroke();
       if (n.pinned) {
         ctx.beginPath();
@@ -748,18 +1228,21 @@ main { flex: 1; display: flex; min-height: 0; }
         ctx.stroke();
       }
     }
+    ctx.globalAlpha = 1;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (zoom > 0.45) {
-      ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      for (const n of nodes.values()) {
-        const sx = n.x * zoom + panX;
-        const sy = n.y * zoom + panY;
-        if (sx < -60 || sx > width + 60 || sy < -60 || sy > height + 60) continue;
-        ctx.fillStyle = n === selected ? '#f1f5f9' : '#94a3b8';
-        ctx.fillText(n.label, sx, sy + n.r * zoom + 13);
-      }
+    const showAll = zoom > 0.45;
+    ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    for (const n of nodes.values()) {
+      const emphasized = n === selected || n === hovered;
+      if (!showAll && !emphasized) continue;
+      if (hood && !hood.has(n) && !emphasized) continue;
+      const sx = n.x * zoom + panX;
+      const sy = n.y * zoom + panY;
+      if (sx < -60 || sx > width + 60 || sy < -60 || sy > height + 60) continue;
+      ctx.fillStyle = emphasized ? '#f1f5f9' : '#94a3b8';
+      ctx.fillText(n.label, sx, sy + n.r * zoom + 13);
     }
   }
 
@@ -776,16 +1259,16 @@ main { flex: 1; display: flex; min-height: 0; }
   }
 
   function mergeHits(hits) {
-    const batch = beginBatch();
+    const batch = beginBatch(ROOT_GROUP, 'Search results');
     for (const hit of hits) {
       const n = mergeNode(batch, hit.type, hit.id, hit.snippet || {});
       if (!n) continue;
       const s = hit.snippet || {};
       if (s.corporationId !== null && s.corporationId !== undefined) {
-        mergeEdge(n, nodes.get('Corporation:' + s.corporationId), 'member');
+        mergeEdge(n, nodes.get('Corporation:' + s.corporationId), 'member', batch);
       }
       if (s.ecosystemId !== null && s.ecosystemId !== undefined) {
-        mergeEdge(n, nodes.get('Ecosystem:' + s.ecosystemId), 'member');
+        mergeEdge(n, nodes.get('Ecosystem:' + s.ecosystemId), 'member', batch);
       }
     }
     endBatch(batch);
@@ -817,8 +1300,22 @@ main { flex: 1; display: flex; min-height: 0; }
 
   searchInput.addEventListener('keydown', ev => {
     if (ev.key === 'Enter') runSearch();
+    ev.stopPropagation();
   });
   surfaceSelect.addEventListener('change', runSearch);
+
+  document.getElementById('btn-fit').addEventListener('click', fitView);
+  document.getElementById('btn-clear').addEventListener('click', () => {
+    nodes.clear();
+    edges.clear();
+    groups.clear();
+    select(null);
+    hovered = null;
+    searchInput.value = '';
+    dirty = true;
+    updateStats();
+    init();
+  });
 
   async function pollHealth() {
     try {
@@ -841,6 +1338,7 @@ main { flex: 1; display: flex; min-height: 0; }
       const res = await api('/v4/graph/search', { surface: 'Ecosystem', limit: 20 });
       showCount(res.totalCount);
       mergeHits(res.hits || []);
+      fitView();
     } catch (e) {
       toast(errMsg(e));
     }
@@ -850,6 +1348,7 @@ main { flex: 1; display: flex; min-height: 0; }
   requestAnimationFrame(frame);
   pollHealth();
   init();
+  updateStats();
 })();
 </script>
 </body>
