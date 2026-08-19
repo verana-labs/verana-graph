@@ -2,7 +2,14 @@ import { EventEmitter } from 'node:events'
 import { Knex } from 'knex'
 import { Dereferencer } from '../deref/deref'
 import { IndexerRestClient } from '../indexer/rest'
-import { BlockMessage, ChangeEnvelope, needsResolve, ReadyMessage, ResolveResponse } from '../indexer/types'
+import {
+  BlockMessage,
+  ChangeEnvelope,
+  needsResolve,
+  ReadyMessage,
+  ResolveResponse,
+  SubscribedMessage,
+} from '../indexer/types'
 import { IndexerSubscription } from '../indexer/ws'
 import { Logger } from '../util/logger'
 import { applyInlineTrust, reconcile, repairDerivedFacets } from './reconciler'
@@ -29,6 +36,8 @@ export class IngestOrchestrator {
   private previousBlock = -1
   private lastAppliedBlock = -1
   private blockIntervalMs = 6000
+  private generation = 0
+  private readyBlockTime = new Date(0).toISOString()
   private reconnectAttempt = 0
   private stopped = false
   private refreshTimer?: NodeJS.Timeout
@@ -108,21 +117,29 @@ export class IngestOrchestrator {
     if (this.stopped) return
     this.catchingUp = true
     this.buffer = []
+    const generation = ++this.generation
+    const stale = (): boolean => generation !== this.generation || this.stopped
     this.subscription = new IndexerSubscription(
       this.wsUrl,
       {
         onReady: msg => {
+          if (stale()) return
           this.blockIntervalMs = msg.blockIntervalMs
+          this.readyBlockTime = msg.blockTime
           this.reconnectAttempt = 0
-          // previousBlock starts at B - 1 so the very first live block can already expose a gap
+        },
+        onSubscribed: msg => {
+          if (stale()) return
           this.previousBlock = msg.block - 1
-          void this.catchUp(msg).catch(err => {
+          void this.catchUp(msg, stale).catch(err => {
+            if (stale()) return
             this.log.error({ err: (err as Error).message }, 'catch-up failed')
             this.subscription?.close()
             this.scheduleReconnect()
           })
         },
         onBlock: msg => {
+          if (stale()) return
           // previousBlock advances on receipt; lastAppliedBlock only on durable commit
           const gap = msg.block > this.previousBlock + 1
           this.previousBlock = msg.block
@@ -132,7 +149,7 @@ export class IngestOrchestrator {
             this.log.warn({ from: this.lastAppliedBlock, to: msg.block }, 'live gap detected')
             this.catchingUp = true
             this.buffer = [msg]
-            void this.recoverAndDrain().catch(err => {
+            void this.recoverAndDrain(stale).catch(err => {
               this.log.error({ err: (err as Error).message }, 'gap recovery failed')
               this.subscription?.close()
               this.scheduleReconnect()
@@ -142,6 +159,7 @@ export class IngestOrchestrator {
           }
         },
         onDown: reason => {
+          if (stale()) return
           this.log.warn({ reason }, 'indexer subscription down')
           this.scheduleReconnect()
         },
@@ -159,20 +177,21 @@ export class IngestOrchestrator {
   }
 
   // TG-INGEST-3 when the graph is empty, TG-INGEST-5 otherwise; both end by draining the buffer
-  private async catchUp(ready: ReadyMessage): Promise<void> {
+  private async catchUp(subscribed: SubscribedMessage, stale: () => boolean): Promise<void> {
     if (this.lastAppliedBlock < 0) {
-      await this.bootstrap(ready)
+      await this.bootstrap(subscribed, stale)
     } else {
-      await this.recoverAndDrain()
+      await this.recoverAndDrain(stale)
       return
     }
-    await this.drainBuffer()
+    await this.drainBuffer(stale)
   }
 
-  private async bootstrap(ready: ReadyMessage): Promise<void> {
-    const snapshotBlock = ready.block - 1
+  private async bootstrap(subscribed: SubscribedMessage, stale: () => boolean): Promise<void> {
+    const snapshotBlock = subscribed.block - 1
+    const snapshotTime = subscribed.blockTime ?? this.readyBlockTime
     this.log.info({ snapshotBlock }, 'bootstrap: enumerating DID universe')
-    const evidence = { block: snapshotBlock, blockTime: ready.blockTime }
+    const evidence = { block: snapshotBlock, blockTime: snapshotTime }
 
     const pending: Promise<void>[] = []
     let active = 0
@@ -203,11 +222,15 @@ export class IngestOrchestrator {
       pending.push(runOne(did))
     }
     await Promise.all(pending)
+    if (stale()) {
+      this.log.warn({ snapshotBlock }, 'bootstrap superseded by a newer connection, discarding')
+      return
+    }
     // concurrent snapshot resolves cannot see each other's writes; re-derive cross-DID facets
     await repairDerivedFacets(this.db)
 
     await this.db('ingestion_state')
-      .insert({ id: 1, last_applied_block: snapshotBlock, last_block_time: ready.blockTime })
+      .insert({ id: 1, last_applied_block: snapshotBlock, last_block_time: snapshotTime })
       .onConflict('id')
       .merge()
     this.lastAppliedBlock = snapshotBlock
@@ -215,12 +238,13 @@ export class IngestOrchestrator {
   }
 
   // TG-INGEST-5: replay from lastAppliedBlock + 1 until caught up or overlapping the buffer
-  private async recoverAndDrain(): Promise<void> {
+  private async recoverAndDrain(stale: () => boolean): Promise<void> {
     // let any in-flight live block finish before replaying; recovery and live application
     // must never interleave on the same lastAppliedBlock
     await this.applyChain
     let from = this.lastAppliedBlock + 1
     for (;;) {
+      if (stale()) return
       const smallestBuffered = this.buffer[0]?.block
       const page = await this.rest.listChanges(from)
       for (const b of page.blocks) {
@@ -231,16 +255,35 @@ export class IngestOrchestrator {
       if (smallestBuffered !== undefined && page.nextFromBlock >= smallestBuffered) break
       from = page.nextFromBlock
     }
-    await this.drainBuffer()
+    await this.drainBuffer(stale)
   }
 
-  private async drainBuffer(): Promise<void> {
+  private async drainBuffer(stale: () => boolean): Promise<void> {
     while (this.buffer.length > 0) {
+      if (stale()) return
       const msg = this.buffer.shift() as BlockMessage
+      if (msg.block <= this.lastAppliedBlock) continue
+      if (msg.block > this.lastAppliedBlock + 1) {
+        this.log.warn({ from: this.lastAppliedBlock + 1, to: msg.block - 1 }, 'buffered gap, replaying')
+        await this.replayUpTo(msg.block)
+      }
       if (msg.block <= this.lastAppliedBlock) continue
       await this.applyBlock(msg)
     }
-    this.catchingUp = false
+    if (!stale()) this.catchingUp = false
+  }
+
+  private async replayUpTo(exclusiveEnd: number): Promise<void> {
+    let from = this.lastAppliedBlock + 1
+    for (;;) {
+      const page = await this.rest.listChanges(from)
+      for (const b of page.blocks) {
+        if (b.block >= exclusiveEnd) return
+        await this.applyBlock({ type: 'block', ...b })
+      }
+      if (page.nextFromBlock === null || page.nextFromBlock >= exclusiveEnd) return
+      from = page.nextFromBlock
+    }
   }
 
   // Live blocks are applied strictly in order; a queue depth of one is enough because the WS

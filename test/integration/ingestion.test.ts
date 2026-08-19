@@ -44,6 +44,63 @@ describe('ingestion lifecycle', () => {
     })
   }
 
+  it('a gap inside the buffered sequence is replayed, not silently skipped', async () => {
+    mock.resolveDelayMs = 500
+    await orchestrator.start()
+    await waitFor(async () => mock.resolveCalls.length > 0)
+
+    mock.pushBlock(block(100, []))
+    mock.world.snapshots.get(DIDS.issuer)?.set(101, issuerSnapshot(false))
+    mock.suppressWs = true
+    mock.pushBlock(block(101, [{ did: DIDS.issuer, participations: true }]))
+    mock.suppressWs = false
+    mock.pushBlock(block(102, []))
+    expect(await db('ingestion_state').where('id', 1).first()).toBeUndefined()
+    mock.resolveDelayMs = 0
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 102, 20_000)
+    expect(await db('participants').where('id', 11).first()).toBeUndefined()
+  })
+
+  it('a bootstrap superseded by a reconnect never commits its snapshot', async () => {
+    mock.resolveDelayMs = 2500
+    await orchestrator.start()
+    await waitFor(async () => mock.resolveCalls.length > 0)
+
+    mock.resolveDelayMs = 0
+    mock.world.readyBlock = 106
+    mock.dropSockets()
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 105, 20_000)
+    await new Promise(r => setTimeout(r, 2800))
+    expect((await db('ingestion_state').first()).last_applied_block).toBe(105)
+  })
+
+  it('TG-INGEST-3: bootstrap anchors on subscribed.block, not ready.block', async () => {
+    const world = buildWorld()
+    world.blocks.push({ type: 'block', block: 104, blockTime: new Date().toISOString(), changes: [] })
+    await mock.stop()
+    mock = new MockIndexer(world)
+    await mock.start()
+    const config = testConfig(mock.baseUrl, mock.wsUrl)
+    const rest = new IndexerRestClient(config.indexerBaseUrl)
+    const deref = new Dereferencer(db, rest, config, log)
+    orchestrator = new IngestOrchestrator(db, rest, deref, config.indexerWsUrl, log)
+
+    await orchestrator.start()
+    await waitFor(async () => {
+      const row = await db('ingestion_state').where('id', 1).first()
+      return row?.last_applied_block === 104
+    })
+  })
+
+  it('TG-INGEST-3: without the subscribed acknowledgement the bootstrap never starts', async () => {
+    mock.suppressAck = true
+    await orchestrator.start()
+    await new Promise(resolve => setTimeout(resolve, 400))
+    expect(await db('ingestion_state').where('id', 1).first()).toBeUndefined()
+  })
+
   it('TG-INGEST-3: bootstrap materialises the full snapshot at B-1', async () => {
     await bootstrapped()
 
