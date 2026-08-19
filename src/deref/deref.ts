@@ -77,7 +77,8 @@ export class Dereferencer {
       UPDATE dids SET schema_text = sub.text FROM (
         SELECT p.did_id, string_agg(DISTINCT concat_ws(' ', cs.title, cs.description), ' ') AS text
         FROM participants p JOIN credential_schemas cs ON cs.id = p.credential_schema_id
-        WHERE p.did_id IN (SELECT did_id FROM participants WHERE credential_schema_id = ?)
+        WHERE p.state = 'ACTIVE'
+          AND p.did_id IN (SELECT did_id FROM participants WHERE credential_schema_id = ?)
         GROUP BY p.did_id
       ) sub WHERE dids.did = sub.did_id
       `,

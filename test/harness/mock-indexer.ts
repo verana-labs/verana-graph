@@ -25,6 +25,7 @@ export class MockIndexer {
   suppressWs = false
   suppressAck = false
   resolveDelayMs = 0
+  resolveDelayByDid = new Map<string, number>()
 
   constructor(readonly world: MockWorld) {}
 
@@ -59,7 +60,8 @@ export class MockIndexer {
         req.on('end', async () => {
           const did = (JSON.parse(raw) as { did: string }).did
           this.resolveCalls.push({ did, height })
-          if (this.resolveDelayMs > 0) await new Promise(r => setTimeout(r, this.resolveDelayMs))
+          const delay = this.resolveDelayByDid.get(did) ?? this.resolveDelayMs
+          if (delay > 0) await new Promise(r => setTimeout(r, delay))
           const snap = this.resolveAt(did, height)
           if (!snap) return json(404, { error: 'unknown did' })
           json(200, snap)

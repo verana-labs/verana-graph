@@ -151,6 +151,7 @@ function participantFilter(col: keyof ParticipantConstraints): FieldSpec {
       db
         .from(base.clone().clearSelect().clearOrder().select('d.did').as('sub'))
         .join('participants as pf', 'pf.did_id', 'sub.did')
+        .where('pf.state', 'ACTIVE')
         .select({ value: `pf.${col}` })
         .countDistinct('sub.did as count')
         .groupBy(`pf.${col}`)
@@ -163,7 +164,7 @@ export function applyParticipantExists(q: Knex.QueryBuilder, db: Knex): void {
   const store = (q as unknown as Record<symbol, ParticipantConstraints>)[participantConstraintsKey]
   if (!store) return
   q.whereExists(function () {
-    this.select(1).from('participants as pf').whereRaw('pf.did_id = d.did')
+    this.select(1).from('participants as pf').whereRaw('pf.did_id = d.did').where('pf.state', 'ACTIVE')
     for (const [col, f] of Object.entries(store) as [string, NormalizedFilter][]) {
       if (f.op === 'eq') this.where(`pf.${col}`, f.value as string)
       else this.whereIn(`pf.${col}`, f.value as string[])

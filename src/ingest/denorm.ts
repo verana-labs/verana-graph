@@ -89,6 +89,7 @@ export async function schemaTextForDid(trx: Knex, did: string): Promise<string |
   const rows = await trx('credential_schemas as cs')
     .join('participants as p', 'p.credential_schema_id', 'cs.id')
     .where('p.did_id', did)
+    .where('p.state', 'ACTIVE')
     .distinct<{ title: string | null; description: string | null }[]>('cs.id', 'cs.title', 'cs.description')
   const text = rows
     .flatMap(r => [r.title, r.description])

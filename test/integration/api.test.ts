@@ -13,7 +13,7 @@ import { Dereferencer } from '../../src/deref/deref'
 import { IndexerRestClient } from '../../src/indexer/rest'
 import { IngestOrchestrator } from '../../src/ingest/orchestrator'
 import { createLogger } from '../../src/util/logger'
-import { buildWorld, DIDS } from '../harness/fixture'
+import { buildWorld, DIDS, issuerSnapshot } from '../harness/fixture'
 import { block, MockIndexer } from '../harness/mock-indexer'
 import { freshDb, testConfig, waitFor } from '../harness/setup'
 
@@ -377,6 +377,33 @@ describe('read APIs against a bootstrapped graph', () => {
       expect(messages.slice(1).map(m => m.type)).toEqual(['block', 'block'])
       expect(messages.slice(1).map(m => m.block)).toEqual([100, 101])
       ws.close()
+    })
+  })
+
+  describe('participant lifecycle in search', () => {
+    it('TG-FCT-3: a non-ACTIVE participant never matches faceted-search joins', async () => {
+      const before = await search({
+        surface: 'Did',
+        filters: { 'Participant.role': { eq: 'ISSUER' }, 'Participant.credentialSchemaId': { eq: 101 } },
+      })
+      expect((before.body as { hits: { id: string }[] }).hits.map(h => h.id)).toContain(DIDS.issuer)
+
+      const snap = structuredClone(issuerSnapshot(true))
+      const p11 = snap.participations?.find(p => p.id === 11)
+      if (p11) p11.state = 'EXPIRED'
+      mock.world.snapshots.get(DIDS.issuer)?.set(150, snap)
+      mock.pushBlock(block(150, [{ did: DIDS.issuer, participations: true }]))
+      await waitFor(async () => (await db('participants').where('id', 11).first())?.state === 'EXPIRED')
+
+      const after = await search({
+        surface: 'Did',
+        filters: { 'Participant.role': { eq: 'ISSUER' }, 'Participant.credentialSchemaId': { eq: 101 } },
+      })
+      expect((after.body as { hits: { id: string }[] }).hits.map(h => h.id)).not.toContain(DIDS.issuer)
+
+      mock.world.snapshots.get(DIDS.issuer)?.set(151, issuerSnapshot(true))
+      mock.pushBlock(block(151, [{ did: DIDS.issuer, participations: true }]))
+      await waitFor(async () => (await db('participants').where('id', 11).first())?.state === 'ACTIVE')
     })
   })
 })

@@ -5,6 +5,7 @@ import * as m0002 from './migrations/0002_nullable_corporation'
 import * as m0003 from './migrations/0003_nullable_participant_corp'
 import * as m0004 from './migrations/0004_nullable_expires_at_time'
 import * as m0005 from './migrations/0005_ecs_credential_issuance'
+import * as m0006 from './migrations/0006_participant_states'
 
 // int8 (block heights, VPR ids) parsed as Number: practical uint64 values in this domain fit
 // well below 2^53. numeric (coin amounts) stays a string.
@@ -18,6 +19,7 @@ const MIGRATIONS: Record<string, Knex.Migration> = {
   '0003_nullable_participant_corp.ts': m0003,
   '0004_nullable_expires_at_time.ts': m0004,
   '0005_ecs_credential_issuance.ts': m0005,
+  '0006_participant_states.ts': m0006,
 }
 
 export function createDb(databaseUrl: string): Knex {
