@@ -1,4 +1,5 @@
 import Fastify from 'fastify'
+import { registerDocs } from './api/docs'
 import { ApiError } from './api/errors'
 import { registerSearchRoute } from './api/search/route'
 import { registerTraverseRoute } from './api/traverse/route'
@@ -38,6 +39,7 @@ app.get('/health', async () => ({
   status: 'ok',
   lastAppliedBlock: orchestrator.currentState.lastAppliedBlock,
 }))
+registerDocs(app)
 registerTraverseRoute(app, db)
 registerSearchRoute(app, db, config)
 
