@@ -24,7 +24,8 @@
     "test": "vitest run --exclude 'test/integration/**'",
     "test:all": "vitest run",
     "prepare": "corepack enable",
-    "test:db": "vitest run test/integration"
+    "test:db": "vitest run test/integration",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
     "@digitalbazaar/ed25519-signature-2020": "5.4.0",
