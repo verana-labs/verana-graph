@@ -170,6 +170,24 @@ describe.skipIf(!INDEXER_URL)('graph against a live indexer', () => {
     expect((body as { totalCount: number }).totalCount).toBe(Number(n?.n))
   })
 
+  it('mirrors the indexer state it ingested', async () => {
+    const row = await db('ingestion_state').where('id', 1).first()
+    const height = row.last_applied_block
+    const rest = new IndexerRestClient(INDEXER_URL as string)
+
+    const remote = new Set<string>()
+    for await (const did of rest.enumerateDids(height)) remote.add(did)
+    expect(remote.size).toBeGreaterThan(0)
+    const local = new Set((await db('dids').select('did')).map((r: { did: string }) => r.did))
+    for (const did of remote) expect(local.has(did)).toBe(true)
+
+    const sample = await db('dids').where('trusted', true).first()
+    if (sample) {
+      const snap = await rest.resolve(sample.did, height)
+      expect(snap.trusted).toBe(true)
+    }
+  })
+
   it('answers with the TG-ERR-1 contract', async () => {
     const unknown = await post('/v4/graph/traverse', { query: 'A1', input: { did: 'did:example:nobody' } })
     expect(unknown.status).toBe(404)
