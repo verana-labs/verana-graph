@@ -1,6 +1,6 @@
 import Fastify from 'fastify'
 import { registerDocs } from './api/docs'
-import { ApiError } from './api/errors'
+import { apiErrorHandler } from './api/errors'
 import { registerSearchRoute } from './api/search/route'
 import { registerTraverseRoute } from './api/traverse/route'
 import { attachBlockProgressServer } from './bps/server'
@@ -30,11 +30,7 @@ const orchestrator = new IngestOrchestrator(
 )
 
 const app = Fastify({ logger: { level: config.logLevel } })
-app.setErrorHandler((err: unknown, _req, reply) => {
-  if (err instanceof ApiError) return reply.status(err.httpStatus).send(err.toBody())
-  log.error({ err: err instanceof Error ? err.message : String(err) }, 'unhandled api error')
-  return reply.status(500).send({ error: { code: 'INTERNAL', message: 'internal error' } })
-})
+app.setErrorHandler(apiErrorHandler(message => log.error({ err: message }, 'unhandled api error')))
 app.get('/health', async () => ({
   status: 'ok',
   lastAppliedBlock: orchestrator.currentState.lastAppliedBlock,
