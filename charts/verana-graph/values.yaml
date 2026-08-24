@@ -68,7 +68,7 @@ database:
     tag: '16-alpine'
     pullPolicy: IfNotPresent
   storage:
-    size: 10Gi
+    size: 2Gi
     # '' uses the cluster's default StorageClass; set e.g. csi-cinder-classic on devnet.
     storageClassName: ''
   resources:
