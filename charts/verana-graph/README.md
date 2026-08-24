@@ -64,10 +64,14 @@ helm install graph ./charts/verana-graph --namespace verana --create-namespace \
 | `database.pwdSecret` | `{}` | Secret holding the DB password, `{name, key}`. Required |
 | `database.urlSecret` | `{}` | Secret holding the whole connection string, `{name, key}`. Takes precedence |
 | `database.image.tag` | `"16-alpine"` | Embedded Postgres image tag (`enabled: true` only) |
-| `database.storage.size` | `10Gi` | Embedded Postgres volume size |
+| `database.storage.size` | `2Gi` | Embedded Postgres volume size, see Storage sizing below |
 | `database.storage.storageClassName` | `""` | `""` = cluster default; e.g. `csi-cinder-classic` on devnet |
 | `ingress.enabled` | `false` | Publish an Ingress |
 | `ingress.websocketTimeoutSeconds` | `3600` | Proxy timeout for the block-progress stream |
+
+### Storage sizing
+
+The graph stores current state only, never per block history, so the database grows with the number of DIDs, participants and credentials, not with chain age. Measured on the current schema: an empty database is 8.7 MB and a 4,500 DID world with 5,100 participants and 4,200 credentials is 26 MB, about 4 KB per DID with everything it brings along. The volume also holds the postgres base files (about 50 MB) and WAL, which is capped at 1 GB by default and dominates at this scale. The 2Gi default covers roughly 100k DIDs with margin. Revisit it when the network approaches that.
 
 Numeric `config` values are quoted on purpose: Helm renders large YAML numbers in
 scientific notation, and the service parses these with `parseInt`.
