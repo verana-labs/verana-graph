@@ -38,6 +38,17 @@ body {
 #search { width: 340px; }
 #surface:focus, #search:focus { outline: 1px solid #64748b; }
 #count { color: #94a3b8; font-size: 12px; white-space: nowrap; }
+#btn-more {
+  background: #1e293b;
+  color: #cbd5e1;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 5px 11px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+#btn-more:hover { border-color: #64748b; color: #f1f5f9; }
 #health {
   margin-left: auto;
   display: flex;
@@ -266,6 +277,7 @@ main { flex: 1; display: flex; min-height: 0; }
   </select>
   <input id="search" type="search" placeholder="Search the graph, press Enter ( / to focus )" autocomplete="off">
   <span id="count"></span>
+  <button id="btn-more" hidden>Load more</button>
   <div id="health"><span class="dot"></span><span id="health-text">connecting</span></div>
 </header>
 <main>
@@ -1278,9 +1290,16 @@ main { flex: 1; display: flex; min-height: 0; }
     countEl.textContent = total + (total === 1 ? ' result' : ' results');
   }
 
-  async function runSearch() {
-    const text = searchInput.value.trim()
-    const body = { surface: surfaceSelect.value, limit: 50, ...(text ? { freeText: text } : {}) }
+  let searchBody = null;
+  let searchCursor = null;
+  const moreBtn = document.getElementById('btn-more');
+
+  function updateMoreButton() {
+    moreBtn.hidden = !searchCursor || nodes.size >= MAX_NODES;
+  }
+
+  async function runSearchPage(reset) {
+    const body = reset ? searchBody : { ...searchBody, cursor: searchCursor };
     let res;
     try {
       res = await api('/v4/graph/search', body);
@@ -1288,14 +1307,27 @@ main { flex: 1; display: flex; min-height: 0; }
       toast(errMsg(e));
       return;
     }
+    searchCursor = res.cursor || null;
     showCount(res.totalCount);
     if (res.totalCount === 0) {
-      toast('no results' + (text ? ' for "' + text + '"' : '') + ' on the ' + body.surface + ' surface');
+      const text = searchBody.freeText;
+      toast('no results' + (text ? ' for "' + text + '"' : '') + ' on the ' + searchBody.surface + ' surface');
+      updateMoreButton();
       return;
     }
     mergeHits(res.hits || []);
-    fitView();
+    if (reset) fitView();
+    updateMoreButton();
   }
+
+  async function runSearch() {
+    const text = searchInput.value.trim()
+    searchBody = { surface: surfaceSelect.value, limit: 50, ...(text ? { freeText: text } : {}) }
+    searchCursor = null;
+    await runSearchPage(true);
+  }
+
+  moreBtn.addEventListener('click', () => runSearchPage(false));
 
   searchInput.addEventListener('keydown', ev => {
     if (ev.key === 'Enter') runSearch();
@@ -1311,6 +1343,8 @@ main { flex: 1; display: flex; min-height: 0; }
     select(null);
     hovered = null;
     searchInput.value = '';
+    searchCursor = null;
+    updateMoreButton();
     dirty = true;
     updateStats();
     init();
