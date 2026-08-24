@@ -682,11 +682,11 @@ main { flex: 1; display: flex; min-height: 0; }
       await exp.run(node, batch);
       endBatch(batch);
       if (batch.touched === 0) {
-        groups.delete(gid);
+        collapseGroup(gid);
         toast('this expansion has nothing to show');
       }
     } catch (e) {
-      groups.delete(gid);
+      collapseGroup(gid);
       toast(errMsg(e));
     }
     inflight.delete(gid);
@@ -1279,9 +1279,8 @@ main { flex: 1; display: flex; min-height: 0; }
   }
 
   async function runSearch() {
-    const body = { surface: surfaceSelect.value, limit: 50 };
-    const text = searchInput.value.trim();
-    if (text) body.freeText = text;
+    const text = searchInput.value.trim()
+    const body = { surface: surfaceSelect.value, limit: 50, ...(text ? { freeText: text } : {}) }
     let res;
     try {
       res = await api('/v4/graph/search', body);
