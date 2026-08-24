@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import { registerDocs } from './api/docs'
 import { apiErrorHandler } from './api/errors'
+import { registerExplorer } from './api/explorer'
 import { registerSearchRoute } from './api/search/route'
 import { registerTraverseRoute } from './api/traverse/route'
 import { attachBlockProgressServer } from './bps/server'
@@ -36,6 +37,7 @@ app.get('/health', async () => ({
   lastAppliedBlock: orchestrator.currentState.lastAppliedBlock,
 }))
 registerDocs(app)
+registerExplorer(app)
 registerTraverseRoute(app, db)
 registerSearchRoute(app, db, config)
 
