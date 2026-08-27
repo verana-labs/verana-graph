@@ -14,10 +14,14 @@ export interface OperativeIdentity {
   orgOrganizationKind: string | null
   orgLei: string | null
   orgRegistryId: string | null
+  orgLogoUri: string | null
+  orgLogoDigestSri: string | null
   personaName: string | null
   personaDescription: string | null
   personaCountryCode: string | null
   personaJurisdiction: string | null
+  personaAvatarUri: string | null
+  personaAvatarDigestSri: string | null
 }
 
 export const EMPTY_IDENTITY: OperativeIdentity = {
@@ -29,10 +33,14 @@ export const EMPTY_IDENTITY: OperativeIdentity = {
   orgOrganizationKind: null,
   orgLei: null,
   orgRegistryId: null,
+  orgLogoUri: null,
+  orgLogoDigestSri: null,
   personaName: null,
   personaDescription: null,
   personaCountryCode: null,
   personaJurisdiction: null,
+  personaAvatarUri: null,
+  personaAvatarDigestSri: null,
 }
 
 // TG-FCT-3: the operative ORG-or-PERSONA credential the trust chain rests on
@@ -53,6 +61,8 @@ export function identityFromCredentials(
     out.orgOrganizationKind = str(s.organizationKind)
     out.orgLei = str(s.lei)
     out.orgRegistryId = str(s.registryId)
+    out.orgLogoUri = str(s.logoUri)
+    out.orgLogoDigestSri = str(s.logoDigestSri)
   } else if (persona) {
     const s = persona.credentialSubject
     out.operatorKind = 'Persona'
@@ -60,6 +70,8 @@ export function identityFromCredentials(
     out.personaDescription = str(s.description)
     out.personaCountryCode = str(s.controllerCountryCode)
     out.personaJurisdiction = str(s.controllerJurisdiction)
+    out.personaAvatarUri = str(s.avatarUri)
+    out.personaAvatarDigestSri = str(s.avatarDigestSri)
   }
   return out
 }
@@ -68,18 +80,30 @@ export interface ServiceFacets {
   scName: string | null
   scType: string | null
   scDescription: string | null
+  scLogoUri: string | null
+  scLogoDigestSri: string | null
   minAge: number | null
 }
 
 export function serviceFacets(response: ResolveResponse): ServiceFacets {
   const sc = (response.ecsCredentials ?? []).find(c => c.ecsSchema === 'ServiceCredential')
-  if (!sc) return { scName: null, scType: null, scDescription: null, minAge: null }
+  if (!sc)
+    return {
+      scName: null,
+      scType: null,
+      scDescription: null,
+      scLogoUri: null,
+      scLogoDigestSri: null,
+      minAge: null,
+    }
   const s = sc.credentialSubject
   const age = typeof s.minimumAgeRequired === 'number' ? s.minimumAgeRequired : null
   return {
     scName: str(s.name),
     scType: str(s.type),
     scDescription: str(s.description),
+    scLogoUri: str(s.logoUri),
+    scLogoDigestSri: str(s.logoDigestSri),
     minAge: age,
   }
 }
