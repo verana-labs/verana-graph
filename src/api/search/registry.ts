@@ -57,6 +57,20 @@ function applyRange(q: Knex.QueryBuilder, col: string, r: RangeValue): void {
   if (r.lte !== undefined) q.where(col, '<=', r.lte)
 }
 
+// TG-FCT-6 requires a facet for every eq/in filter, including the derived ones
+function expressionFacet(sql: string) {
+  return (base: Knex.QueryBuilder, db: Knex): Knex.QueryBuilder =>
+    base
+      .clone()
+      .clearSelect()
+      .clearOrder()
+      .select(db.raw(`${sql} as value`))
+      .count('* as count')
+      .groupBy(db.raw(sql))
+      .orderBy('count', 'desc')
+      .limit(20)
+}
+
 function columnFacet(col: string, alias = col) {
   return (base: Knex.QueryBuilder): Knex.QueryBuilder =>
     base
@@ -104,7 +118,7 @@ export const DID_FILTERS: Record<string, FieldSpec> = {
       const want = f.value === true || f.value === 'true'
       q.whereRaw(`exists(select 1 from corporations cf where cf.did = d.did) = ?`, [want])
     },
-    facet: null,
+    facet: expressionFacet('exists(select 1 from corporations cf where cf.did = d.did)'),
   },
   'Did.isEcosystem': {
     ops: ['eq'],
@@ -112,7 +126,7 @@ export const DID_FILTERS: Record<string, FieldSpec> = {
       const want = f.value === true || f.value === 'true'
       q.whereRaw(`exists(select 1 from ecosystems ef where ef.did = d.did) = ?`, [want])
     },
-    facet: null,
+    facet: expressionFacet('exists(select 1 from ecosystems ef where ef.did = d.did)'),
   },
   'Did.ecosystemIds': {
     ops: ['contains', 'containsAny'],
@@ -134,7 +148,7 @@ export const DID_FILTERS: Record<string, FieldSpec> = {
         q.whereRaw('coalesce(d.org_name, d.persona_name) = any(?)', [f.value as string[]])
       else q.whereRaw('coalesce(d.org_name, d.persona_name) like ?', [`${String(f.value)}%`])
     },
-    facet: null,
+    facet: expressionFacet('coalesce(d.org_name, d.persona_name)'),
   },
   'EcsCredential.ServiceCredential.type': spec('d.sc_type', ['eq', 'in'], 'd.sc_type'),
   'EcsCredential.ServiceCredential.minimumAgeRequired': spec('d.min_age', ['range'], null),
