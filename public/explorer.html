@@ -381,10 +381,30 @@ main { flex: 1; display: flex; min-height: 0; }
     return s.slice(0, head) + '…' + s.slice(s.length - tail);
   }
 
+  const logoCache = new Map();
+
+  // the logo URIs ride on the snippet (TG-FCT-6a), so drawing one costs no extra request
+  function nodeLogo(n) {
+    const d = n.data || {};
+    const url = d.serviceLogoUri || d.operatorLogoUri;
+    if (!url) return null;
+    let entry = logoCache.get(url);
+    if (entry === undefined) {
+      const img = new Image();
+      entry = { img, ok: false };
+      logoCache.set(url, entry);
+      img.onload = () => { entry.ok = true; dirty = true; };
+      img.onerror = () => { entry.ok = false; };
+      img.src = url;
+    }
+    return entry.ok ? entry.img : null;
+  }
+
   function nodeLabel(n) {
+    const d = n.data || {};
     if (n.kind === 'Ecosystem') return 'Eco ' + n.id;
     if (n.kind === 'Corporation') return 'Corp ' + n.id;
-    if (n.kind === 'Did') return midTruncate(String(n.id), 24);
+    if (n.kind === 'Did') return d.serviceName || d.operatorName || midTruncate(String(n.id), 24);
     if (n.kind === 'Participant') return 'P' + n.id + (n.data.role ? ' ' + n.data.role : '');
     return n.kind + ' ' + midTruncate(String(n.id), 16);
   }
@@ -726,10 +746,26 @@ main { flex: 1; display: flex; min-height: 0; }
 
   const PANEL_SECTIONS = {
     Did: d => [
+      ['Service', [
+        row('Name', d.serviceName),
+        row('Type', d.serviceType),
+        row('Description', d.serviceDescription),
+        row('Logo', d.serviceLogoUri, { mono: true }),
+        row('Endpoints', (d.serviceEndpoints || []).map(e => e.type).join(', ')),
+      ]],
+      ['Operator', [
+        row('Name', d.operatorName),
+        row('Kind', d.operatorKind),
+        row('Country', d.operatorCountryCode),
+        row('Logo', d.operatorLogoUri, { mono: true }),
+      ]],
       ['Identity', [
         row('DID', d.did, { mono: true, copy: true }),
         row('Corporation', d.corporationId),
         row('Pattern', d.pattern),
+        row('Is corporation', d.isCorporation, { bool: true }),
+        row('Is ecosystem', d.isEcosystem, { bool: true }),
+        row('Ecosystems', (d.ecosystemIds || []).join(', ')),
       ]],
       ['Trust', [
         row('Trusted', d.trusted, { bool: true }),
@@ -920,7 +956,7 @@ main { flex: 1; display: flex; min-height: 0; }
         sectionsEl.appendChild(sec);
       }
       const KNOWN = {
-        Did: ['did', 'corporationId', 'pattern', 'trusted', 'isTrustExpired', 'evaluatedAtTime', 'evaluatedAtBlock', 'expiresAtTime', 'lastObservedAtTime'],
+        Did: ['did', 'corporationId', 'pattern', 'trusted', 'isTrustExpired', 'evaluatedAtTime', 'evaluatedAtBlock', 'expiresAtTime', 'lastObservedAtTime', 'serviceName', 'serviceType', 'serviceDescription', 'serviceLogoUri', 'serviceLogoDigestSri', 'serviceEndpoints', 'operatorName', 'operatorKind', 'operatorCountryCode', 'operatorLogoUri', 'operatorLogoDigestSri', 'isCorporation', 'isEcosystem', 'ecosystemIds'],
         Participant: ['id', 'role', 'state', 'schemaTitle', 'credentialSchemaId', 'ecosystemId', 'validatorParticipantId', 'didId', 'vsOperator', 'weight', 'issuedCredentials', 'verifiedCredentials', 'lastObservedAtTime'],
         Ecosystem: ['id', 'did', 'corporationId', 'archived', 'lastObservedAtTime'],
         Corporation: ['id', 'policyAddress', 'deposit', 'slashedEvents'],
@@ -1221,6 +1257,18 @@ main { flex: 1; display: flex; min-height: 0; }
       ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
       ctx.fillStyle = nodeColor(n);
       ctx.fill();
+      const logo = zoom > 0.45 ? nodeLogo(n) : null;
+      if (logo) {
+        ctx.save();
+        ctx.clip();
+        try {
+          ctx.drawImage(logo, n.x - n.r, n.y - n.r, n.r * 2, n.r * 2);
+        } catch (_e) {
+          const entry = logoCache.get(logo.src);
+          if (entry) entry.ok = false;
+        }
+        ctx.restore();
+      }
       ctx.lineWidth = 1 / zoom;
       ctx.strokeStyle = n === hovered ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.25)';
       ctx.stroke();
