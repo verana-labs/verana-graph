@@ -204,6 +204,7 @@ const SURFACES: Record<Surface, SurfaceDef> = {
     snippet: r =>
       strip({
         id: r.id,
+        didId: r.did_id,
         type: r.type,
         lastObservedAtTime: iso(r.last_observed_at_time),
         serviceEndpoint: r.service_endpoint ?? undefined,
