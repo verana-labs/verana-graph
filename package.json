@@ -1,6 +1,6 @@
 {
   "name": "verana-graph",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "license": "Apache-2.0",
   "description": "Verana Graph: read-only discovery index over the Verana Indexer (spec v4)",
