@@ -29,6 +29,8 @@ interface SurfaceDef {
   // TG-FCT-5 ranking signals; direction is normative, weights are ours
   scoreExpr: string
   gates: (q: Knex.QueryBuilder, req: SearchRequest, config: Config) => void
+  // hits-query-only joins for card fields; never applied to counts or facets
+  enrich?: (q: Knex.QueryBuilder) => void
   snippet: (row: Record<string, unknown>) => Record<string, unknown>
 }
 
@@ -56,16 +58,48 @@ const SURFACES: Record<Surface, SurfaceDef> = {
         qb.whereNull('d.expires_at_time').orWhere('d.expires_at_time', '>=', new Date().toISOString()),
       )
     },
-    snippet: r =>
-      strip({
-        did: r.did,
-        lastObservedAtTime: iso(r.last_observed_at_time),
-        isTrustExpired: isTrustExpired({ expires_at_time: r.expires_at_time as Date | null }),
-        trusted: r.trusted,
-        pattern: r.pattern ?? undefined,
-        operatorKind: r.operator_kind ?? undefined,
-        corporationId: r.corporation_id,
-      }),
+    enrich(q) {
+      q.select(
+        q.client.raw(`(
+          select coalesce(json_agg(json_build_object(
+            'id', se.id, 'type', se.type, 'serviceEndpoint', se.service_endpoint
+          ) order by se.id), '[]'::json)
+          from service_endpoints se where se.did_id = d.did
+        ) as service_endpoints`),
+        q.client.raw(`(
+          select coalesce(json_agg(e.id order by e.id), '[]'::json)
+          from ecosystems e where e.did = d.did
+        ) as ecosystem_ids`),
+        q.client.raw(`exists(select 1 from corporations cx where cx.did = d.did) as is_corporation`),
+      )
+    },
+    // TG-FCT-6a: every field is present on every hit, null when it has no value
+    snippet: r => ({
+      did: r.did,
+      lastObservedAtTime: iso(r.last_observed_at_time),
+      isTrustExpired: isTrustExpired({ expires_at_time: r.expires_at_time as Date | null }),
+      trusted: r.trusted,
+      pattern: r.pattern ?? null,
+      operatorKind: r.operator_kind ?? null,
+      serviceName: r.sc_name ?? null,
+      serviceType: r.sc_type ?? null,
+      serviceDescription: r.sc_description ?? null,
+      serviceLogoUri: r.sc_logo_uri ?? null,
+      serviceLogoDigestSri: r.sc_logo_digest_sri ?? null,
+      operatorName: r.org_name ?? r.persona_name ?? null,
+      operatorLogoUri: r.org_logo_uri ?? r.persona_avatar_uri ?? null,
+      operatorLogoDigestSri: r.org_logo_digest_sri ?? r.persona_avatar_digest_sri ?? null,
+      operatorCountryCode: r.org_country_code ?? r.persona_country_code ?? null,
+      corporationId: r.corporation_id,
+      corporationDeposit: r.corp_deposit ?? null,
+      corporationSlashedEvents: r.corp_slashed_events ?? null,
+      corporationLastSlashedAtTime: r.corp_last_slashed_at_time ? iso(r.corp_last_slashed_at_time) : null,
+      corporationSlashedValue: r.corp_slashed_value ?? null,
+      serviceEndpoints: r.service_endpoints ?? [],
+      isCorporation: Boolean(r.is_corporation),
+      isEcosystem: ((r.ecosystem_ids as number[] | null) ?? []).length > 0,
+      ecosystemIds: (r.ecosystem_ids as number[] | null) ?? [],
+    }),
   },
   Ecosystem: {
     table: 'ecosystems',
@@ -170,6 +204,7 @@ const SURFACES: Record<Surface, SurfaceDef> = {
     snippet: r =>
       strip({
         id: r.id,
+        didId: r.did_id,
         type: r.type,
         lastObservedAtTime: iso(r.last_observed_at_time),
         serviceEndpoint: r.service_endpoint ?? undefined,
@@ -195,6 +230,7 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex, config: Conf
       throw new ApiError('INVALID_INPUT', `request does not match search schema: ${detail}`)
     }
     const def = SURFACES[req.surface]
+    const freeText = req.freeText?.trim() || undefined
     const limit = req.limit ?? 20
     const hash = queryHash(req as unknown as Record<string, unknown>)
 
@@ -218,8 +254,8 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex, config: Conf
         if (spec.facet && (norm.op === 'eq' || norm.op === 'in')) facetSpecs.push([field, spec.facet])
       }
       if (req.surface === 'Did') applyParticipantExists(q, db)
-      if (req.freeText && def.hasVec) {
-        q.whereRaw(`${def.alias}.search_vec @@ websearch_to_tsquery('simple', ?)`, [req.freeText])
+      if (freeText && def.hasVec) {
+        q.whereRaw(`${def.alias}.search_vec @@ websearch_to_tsquery('simple', ?)`, [freeText])
       }
       return { q, facetSpecs }
     }
@@ -227,13 +263,22 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex, config: Conf
     // float8 end to end: NUMERIC scores round-trip through JS as lossy strings and break the
     // keyset boundary comparison
     const scoreSelect =
-      req.freeText && def.hasVec
+      freeText && def.hasVec
         ? `(ts_rank(${def.alias}.search_vec, websearch_to_tsquery('simple', ?)) * 10 + ${def.scoreExpr})::float8`
         : `(${def.scoreExpr})::float8`
-    const scoreBindings = req.freeText && def.hasVec ? [req.freeText] : []
+    const scoreBindings = freeText && def.hasVec ? [freeText] : []
 
     const { q: hitsQuery, facetSpecs } = base()
     hitsQuery.select(`${def.alias}.*`).select(db.raw(`${scoreSelect} as _score`, scoreBindings))
+    if (req.surface === 'Did') {
+      hitsQuery.select(
+        'corp.deposit as corp_deposit',
+        'corp.slashed_events as corp_slashed_events',
+        'corp.last_slashed_at_time as corp_last_slashed_at_time',
+        'corp.slashed_value as corp_slashed_value',
+      )
+    }
+    def.enrich?.(hitsQuery)
     if (req.cursor !== undefined && req.cursor !== null) {
       const c = decodeCursor(req.cursor, hash)
       hitsQuery.whereRaw(`(${scoreSelect} < ? OR (${scoreSelect} = ? AND ${def.pk} > ?))`, [

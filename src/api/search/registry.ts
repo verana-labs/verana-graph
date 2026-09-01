@@ -57,6 +57,20 @@ function applyRange(q: Knex.QueryBuilder, col: string, r: RangeValue): void {
   if (r.lte !== undefined) q.where(col, '<=', r.lte)
 }
 
+// TG-FCT-6 requires a facet for every eq/in filter, including the derived ones
+function expressionFacet(sql: string) {
+  return (base: Knex.QueryBuilder, db: Knex): Knex.QueryBuilder =>
+    base
+      .clone()
+      .clearSelect()
+      .clearOrder()
+      .select(db.raw(`${sql} as value`))
+      .count('* as count')
+      .groupBy(db.raw(sql))
+      .orderBy('count', 'desc')
+      .limit(20)
+}
+
 function columnFacet(col: string, alias = col) {
   return (base: Knex.QueryBuilder): Knex.QueryBuilder =>
     base
@@ -98,7 +112,44 @@ export const DID_FILTERS: Record<string, FieldSpec> = {
         .limit(20),
   },
   'Did.corporationId': spec('d.corporation_id', ['eq'], 'd.corporation_id'),
+  'Did.isCorporation': {
+    ops: ['eq'],
+    apply(q, f) {
+      const want = f.value === true || f.value === 'true'
+      q.whereRaw(`exists(select 1 from corporations cf where cf.did = d.did) = ?`, [want])
+    },
+    facet: expressionFacet('exists(select 1 from corporations cf where cf.did = d.did)'),
+  },
+  'Did.isEcosystem': {
+    ops: ['eq'],
+    apply(q, f) {
+      const want = f.value === true || f.value === 'true'
+      q.whereRaw(`exists(select 1 from ecosystems ef where ef.did = d.did) = ?`, [want])
+    },
+    facet: expressionFacet('exists(select 1 from ecosystems ef where ef.did = d.did)'),
+  },
+  'Did.ecosystemIds': {
+    ops: ['contains', 'containsAny'],
+    apply(q, f) {
+      const ids = (f.op === 'contains' ? [f.value] : (f.value as unknown[])).map(Number)
+      const sql = f.op === 'contains' ? 'array_agg(ef.id) @> ?::bigint[]' : 'array_agg(ef.id) && ?::bigint[]'
+      q.whereRaw(`(select coalesce(${sql}, false) from ecosystems ef where ef.did = d.did)`, [ids])
+    },
+    facet: null,
+  },
   'Did.operatorKind': spec('d.operator_kind', ['eq', 'in'], 'd.operator_kind'),
+  // TG-FCT-3: one derived field matching the operatorName of the snippet, so a client
+  // filtering by operator name never has to branch on operatorKind
+  'Did.operatorName': {
+    ops: ['eq', 'in', 'prefix'],
+    apply(q, f) {
+      if (f.op === 'eq') q.whereRaw('coalesce(d.org_name, d.persona_name) = ?', [f.value as string])
+      else if (f.op === 'in')
+        q.whereRaw('coalesce(d.org_name, d.persona_name) = any(?)', [f.value as string[]])
+      else q.whereRaw('coalesce(d.org_name, d.persona_name) like ?', [`${String(f.value)}%`])
+    },
+    facet: expressionFacet('coalesce(d.org_name, d.persona_name)'),
+  },
   'EcsCredential.ServiceCredential.type': spec('d.sc_type', ['eq', 'in'], 'd.sc_type'),
   'EcsCredential.ServiceCredential.minimumAgeRequired': spec('d.min_age', ['range'], null),
   'OrganizationCredential.countryCode': spec('d.org_country_code', ['eq', 'in'], 'd.org_country_code'),
