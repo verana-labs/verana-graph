@@ -7,6 +7,7 @@ import * as m0004 from './migrations/0004_nullable_expires_at_time'
 import * as m0005 from './migrations/0005_ecs_credential_issuance'
 import * as m0006 from './migrations/0006_participant_states'
 import * as m0007 from './migrations/0007_result_card_fields'
+import * as m0008 from './migrations/0008_backfill_result_card_logos'
 
 // int8 (block heights, VPR ids) parsed as Number: practical uint64 values in this domain fit
 // well below 2^53. numeric (coin amounts) stays a string.
@@ -22,6 +23,7 @@ const MIGRATIONS: Record<string, Knex.Migration> = {
   '0005_ecs_credential_issuance.ts': m0005,
   '0006_participant_states.ts': m0006,
   '0007_result_card_fields.ts': m0007,
+  '0008_backfill_result_card_logos.ts': m0008,
 }
 
 export function createDb(databaseUrl: string): Knex {
