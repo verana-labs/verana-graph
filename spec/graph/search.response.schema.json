@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://verana.io/schemas/v4/graph/search/response.schema.json",
   "title": "SearchResponse",
-  "description": "Response envelope for the verana-graph faceted-search endpoint `POST /v4/graph/search` per [TG-FCT-6]. Each `hits[].snippet` MUST carry the entity's primary key, `lastObservedAtTime`, and the visibility flags applicable to the surface (`isTrustExpired` for `Did`, `archived` for `Ecosystem` / `CredentialSchema`); implementations MAY surface additional per-card fields (additionalProperties open). Per [TG-FCT-7] the `cursor` field is opaque and is the only way to fetch subsequent pages. All datetime values are ISO 8601 / RFC 3339 UTC strings (see `#/$defs/Iso8601DateTime`). See `### Search REST binding` in the verana-graph spec.",
+  "description": "Response envelope for the verana-graph faceted-search endpoint `POST /v4/graph/search` per [TG-FCT-6]. Each `hits[].snippet` MUST carry the per-surface minimum of [TG-FCT-6a]: the entity's primary key, `lastObservedAtTime`, the visibility flags applicable to the surface (`isTrustExpired` for `Did`, `archived` for `Ecosystem` / `CredentialSchema`), the DID binding on DID-bound surfaces (`did` on `Did` / `Corporation` / `Ecosystem`, `didId` on `ServiceEndpoint`), and, on the `Did` surface, the result-card fields (service name, type, description, both logos, operator identity, the owner Corporation's trust signals — deposit and slash history — and the declared service endpoints). Implementations MAY surface additional per-card fields (additionalProperties open). Per [TG-FCT-7] the `cursor` field is opaque and is the only way to fetch subsequent pages. All datetime values are ISO 8601 / RFC 3339 UTC strings (see `#/$defs/Iso8601DateTime`). See `### Search REST binding` in the verana-graph spec.",
   "type": "object",
   "additionalProperties": false,
   "required": ["query", "totalCount", "hits", "facets", "cursor"],
@@ -94,16 +94,59 @@
     "DidSnippet": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["did", "lastObservedAtTime", "isTrustExpired"],
-      "description": "Minimum normative shape for a `Did` hit card. Implementations MAY surface additional fields (denormalised ECS-credential subject claims, derived facets such as `operatorKind`, etc.).",
+      "required": [
+        "did", "lastObservedAtTime", "isTrustExpired", "trusted", "pattern", "operatorKind",
+        "serviceName", "serviceType", "serviceDescription", "serviceLogoUri", "serviceLogoDigestSri",
+        "operatorName", "operatorLogoUri", "operatorLogoDigestSri", "operatorCountryCode",
+        "corporationId", "corporationDeposit", "corporationSlashedEvents",
+        "corporationLastSlashedAtTime", "corporationSlashedValue",
+        "serviceEndpoints", "isCorporation", "isEcosystem", "ecosystemIds"
+      ],
+      "description": "Minimum normative shape for a `Did` hit card per [TG-FCT-6a]: identity, trust flags, the result-card fields (service name / type / description / logo plus operator name / logo / country), the owner Corporation's trust signals (deposit and slash history), and the declared service endpoints, so a search response alone can render a service list. Nullable fields MUST be present with value `null` when unavailable, not omitted. Implementations MAY surface additional fields.",
       "properties": {
         "did": { "$ref": "#/$defs/DidString" },
         "lastObservedAtTime": { "$ref": "#/$defs/Iso8601DateTime" },
         "isTrustExpired": { "type": "boolean" },
         "trusted": { "type": "boolean" },
-        "pattern": { "enum": ["A", "B", null] },
-        "operatorKind": { "enum": ["Organization", "Persona"] },
-        "corporationId": { "type": "integer", "minimum": 0, "description": "Stable `uint64` id of the DID's owner Corporation per the VPR DID ownership invariant. Never null." }
+        "pattern": { "enum": ["A", "B", null], "description": "Architecture pattern; `null` when the DID presents no ServiceCredential." },
+        "operatorKind": { "enum": ["Organization", "Persona", null], "description": "Derived facet per [TG-FCT-3]; `null` when the trust chain is incomplete." },
+        "serviceName": { "type": ["string", "null"], "description": "`ServiceCredential.name`; `null` when the DID presents no ServiceCredential." },
+        "serviceType": { "type": ["string", "null"], "description": "`ServiceCredential.type`; `null` when the DID presents no ServiceCredential." },
+        "serviceDescription": { "type": ["string", "null"], "description": "`ServiceCredential.description`, optionally truncated for card use (truncation ends at a character boundary and is flagged with a trailing `…`); `null` when the DID presents no ServiceCredential." },
+        "serviceLogoUri": { "type": ["string", "null"], "format": "uri", "description": "`ServiceCredential.logoUri`; `null` when the DID presents no ServiceCredential." },
+        "serviceLogoDigestSri": { "anyOf": [{ "$ref": "#/$defs/DigestSri" }, { "type": "null" }], "description": "`ServiceCredential.logoDigestSri`; `null` when the DID presents no ServiceCredential." },
+        "operatorName": { "type": ["string", "null"], "description": "Operative `OrganizationCredential.name` or `PersonaCredential.name` (Pattern A: self; Pattern B: issuer); `null` when the trust chain is incomplete." },
+        "operatorLogoUri": { "type": ["string", "null"], "format": "uri", "description": "Operative `OrganizationCredential.logoUri` or `PersonaCredential.avatarUri`; `null` when the trust chain is incomplete or the Persona has no avatar." },
+        "operatorLogoDigestSri": { "anyOf": [{ "$ref": "#/$defs/DigestSri" }, { "type": "null" }], "description": "Paired `OrganizationCredential.logoDigestSri` or `PersonaCredential.avatarDigestSri`; `null` under the same conditions as `operatorLogoUri`." },
+        "operatorCountryCode": { "type": ["string", "null"], "pattern": "^[A-Z]{2}$", "description": "Operative `OrganizationCredential.countryCode` or `PersonaCredential.controllerCountryCode`; `null` when the trust chain is incomplete." },
+        "corporationId": { "type": "integer", "minimum": 0, "description": "Stable `uint64` id of the DID's owner Corporation per the VPR DID ownership invariant. Never null." },
+        "corporationDeposit": { "type": ["string", "null"], "description": "Owner `Corporation.deposit` (Coin string), via `Did.corporationId`; `null` only while the owner Corporation record is not yet materialised (bootstrap transient)." },
+        "corporationSlashedEvents": { "type": ["integer", "null"], "minimum": 0, "description": "Owner `Corporation.slashedEvents` (`0` when never slashed); `null` only while the owner Corporation record is not yet materialised (bootstrap transient)." },
+        "corporationLastSlashedAtTime": { "anyOf": [{ "$ref": "#/$defs/Iso8601DateTime" }, { "type": "null" }], "description": "Owner `Corporation.lastSlashedAtTime`; `null` when never slashed, or while the owner Corporation record is not yet materialised." },
+        "corporationSlashedValue": { "type": ["string", "null"], "description": "Owner `Corporation.slashedValue` (Coin string); `null` when never slashed, or while the owner Corporation record is not yet materialised." },
+        "serviceEndpoints": {
+          "type": "array",
+          "description": "The DID's `ServiceEndpoint` records — the non-`LinkedVerifiablePresentation` `services[]` entries of the DID Document. Always present; empty array when the DID Document declares no such entry.",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["id", "type", "serviceEndpoint"],
+            "properties": {
+              "id": { "$ref": "#/$defs/DidString", "description": "DID Document service entry id (DID-relative URL)." },
+              "type": { "type": "string", "description": "Service type, e.g. `did-communication`, `MCP`, `A2A`, `LinkedDomains`, `VsAgentAdminAPI`." },
+              "serviceEndpoint": {
+                "anyOf": [
+                  { "type": "string", "format": "uri" },
+                  { "type": "object" }
+                ],
+                "description": "Endpoint value preserved verbatim per DID-CORE (URI string or object)."
+              }
+            }
+          }
+        },
+        "isCorporation": { "type": "boolean", "description": "`true` iff the DID is the current `did` of a `Corporation` entry. Powers the Corporation badge and the `Did.isCorporation` filter." },
+        "isEcosystem": { "type": "boolean", "description": "`true` iff the DID is the current `did` of at least one `Ecosystem` entry (equivalently: `ecosystemIds` is non-empty). Powers the Ecosystem badge and the `Did.isEcosystem` filter." },
+        "ecosystemIds": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Ids of the `Ecosystem` entries whose current `did` is this DID; `[]` when none. Non-empty iff the DID is an ecosystem controller. Powers the Ecosystem badge and the `Did.ecosystemIds` filter." }
       }
     },
     "EcosystemSnippet": {
@@ -149,9 +192,10 @@
     "ServiceEndpointSnippet": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["id", "type", "lastObservedAtTime"],
+      "required": ["id", "didId", "type", "lastObservedAtTime"],
       "properties": {
         "id": { "$ref": "#/$defs/DidString" },
+        "didId": { "$ref": "#/$defs/DidString", "description": "The owning DID (the `Did` of the `EXPOSES_SERVICE` edge), per [TG-FCT-6a]." },
         "type": { "type": "string" },
         "serviceEndpoint": {
           "anyOf": [
