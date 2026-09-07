@@ -90,6 +90,8 @@ const SURFACES: Record<Surface, SurfaceDef> = {
       operatorLogoUri: r.org_logo_uri ?? r.persona_avatar_uri ?? null,
       operatorLogoDigestSri: r.org_logo_digest_sri ?? r.persona_avatar_digest_sri ?? null,
       operatorCountryCode: r.org_country_code ?? r.persona_country_code ?? null,
+      operatorRegistryId: r.org_registry_id ?? null,
+      operatorAddress: r.org_address ?? null,
       corporationId: r.corporation_id,
       corporationDeposit: r.corp_deposit ?? null,
       corporationSlashedEvents: r.corp_slashed_events ?? null,

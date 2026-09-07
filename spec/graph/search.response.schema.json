@@ -98,11 +98,12 @@
         "did", "lastObservedAtTime", "isTrustExpired", "trusted", "pattern", "operatorKind",
         "serviceName", "serviceType", "serviceDescription", "serviceLogoUri", "serviceLogoDigestSri",
         "operatorName", "operatorLogoUri", "operatorLogoDigestSri", "operatorCountryCode",
+        "operatorRegistryId", "operatorAddress",
         "corporationId", "corporationDeposit", "corporationSlashedEvents",
         "corporationLastSlashedAtTime", "corporationSlashedValue",
         "serviceEndpoints", "isCorporation", "isEcosystem", "ecosystemIds"
       ],
-      "description": "Minimum normative shape for a `Did` hit card per [TG-FCT-6a]: identity, trust flags, the result-card fields (service name / type / description / logo plus operator name / logo / country), the owner Corporation's trust signals (deposit and slash history), and the declared service endpoints, so a search response alone can render a service list. Nullable fields MUST be present with value `null` when unavailable, not omitted. Implementations MAY surface additional fields.",
+      "description": "Minimum normative shape for a `Did` hit card per [TG-FCT-6a]: identity, trust flags, the result-card fields (service name / type / description / logo plus operator name / logo / country / registry id / address), the owner Corporation's trust signals (deposit and slash history), and the declared service endpoints, so a search response alone can render a service list. Nullable fields MUST be present with value `null` when unavailable, not omitted. Implementations MAY surface additional fields.",
       "properties": {
         "did": { "$ref": "#/$defs/DidString" },
         "lastObservedAtTime": { "$ref": "#/$defs/Iso8601DateTime" },
@@ -119,6 +120,8 @@
         "operatorLogoUri": { "type": ["string", "null"], "format": "uri", "description": "Operative `OrganizationCredential.logoUri` or `PersonaCredential.avatarUri`; `null` when the trust chain is incomplete or the Persona has no avatar." },
         "operatorLogoDigestSri": { "anyOf": [{ "$ref": "#/$defs/DigestSri" }, { "type": "null" }], "description": "Paired `OrganizationCredential.logoDigestSri` or `PersonaCredential.avatarDigestSri`; `null` under the same conditions as `operatorLogoUri`." },
         "operatorCountryCode": { "type": ["string", "null"], "pattern": "^[A-Z]{2}$", "description": "Operative `OrganizationCredential.countryCode` or `PersonaCredential.controllerCountryCode`; `null` when the trust chain is incomplete." },
+        "operatorRegistryId": { "type": ["string", "null"], "description": "Operative `OrganizationCredential.registryId`; `null` when the trust chain is incomplete or the operator is a Persona." },
+        "operatorAddress": { "type": ["string", "null"], "description": "Operative `OrganizationCredential.address`; `null` when the trust chain is incomplete or the operator is a Persona." },
         "corporationId": { "type": "integer", "minimum": 0, "description": "Stable `uint64` id of the DID's owner Corporation per the VPR DID ownership invariant. Never null." },
         "corporationDeposit": { "type": ["string", "null"], "description": "Owner `Corporation.deposit` (Coin string), via `Did.corporationId`; `null` only while the owner Corporation record is not yet materialised (bootstrap transient)." },
         "corporationSlashedEvents": { "type": ["integer", "null"], "minimum": 0, "description": "Owner `Corporation.slashedEvents` (`0` when never slashed); `null` only while the owner Corporation record is not yet materialised (bootstrap transient)." },
