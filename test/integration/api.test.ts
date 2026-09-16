@@ -344,7 +344,7 @@ describe('read APIs against a bootstrapped graph', () => {
       const b = body as { totalCount: number; hits: { id: string }[]; facets: Record<string, unknown> }
       expect(b.totalCount).toBe(1)
       expect(b.hits[0]?.id).toBe(DIDS.vs)
-      expect(b.facets['OrganizationCredential.countryCode']).toBeTruthy()
+      expect(b.facets['OrganizationCredential.countryCode']).toEqual([{ value: 'DE', count: 1 }])
     })
 
     it('TG-FCT-2: untrusted DIDs are gated by default and revealed by includeUntrusted', async () => {
@@ -424,6 +424,42 @@ describe('read APIs against a bootstrapped graph', () => {
       })
       expect((body as { hits: { id: number }[] }).hits.map(h => h.id)).toEqual([7])
       expect(validateSearch(body)).toBe(true)
+    })
+
+    it('TG-FCT-6: the Did surface carries its default facets and never the near-unique ones', async () => {
+      const { body } = await search({ surface: 'Did' })
+      expect(validateSearch(body)).toBe(true)
+      const facets = (body as { facets: Record<string, unknown> }).facets
+      expect(facets['Did.operatorKind']).toEqual([{ value: 'Organization', count: 2 }])
+      expect(facets['EcsCredential.ServiceCredential.type']).toEqual([{ value: 'ECommerce', count: 1 }])
+      expect(facets['OrganizationCredential.countryCode']).toEqual([{ value: 'DE', count: 2 }])
+      expect(Object.keys(facets)).not.toContain('OrganizationCredential.lei')
+      expect(Object.keys(facets)).not.toContain('OrganizationCredential.registryId')
+      expect(Object.keys(facets)).not.toContain('Did.operatorName')
+    })
+
+    it('TG-FCT-6: a prefix filter adds no facet, an in filter adds one next to the defaults', async () => {
+      const prefixed = await search({ surface: 'Did', filters: { 'Did.operatorName': { prefix: 'Acme' } } })
+      const prefixedKeys = Object.keys((prefixed.body as { facets: Record<string, unknown> }).facets)
+      expect(prefixedKeys).not.toContain('Did.operatorName')
+      expect(prefixedKeys).toContain('Did.operatorKind')
+
+      const listed = await search({ surface: 'Did', filters: { 'Did.pattern': ['A', 'B'] } })
+      const listedKeys = Object.keys((listed.body as { facets: Record<string, unknown> }).facets)
+      expect(listedKeys).toContain('Did.pattern')
+      expect(listedKeys).toContain('Did.operatorKind')
+    })
+
+    it('TG-FCT-6: the other surfaces carry their own default facets', async () => {
+      const keysOf = async (surface: string): Promise<string[]> => {
+        const { body } = await search({ surface })
+        expect(validateSearch(body)).toBe(true)
+        return Object.keys((body as { facets: Record<string, unknown> }).facets)
+      }
+      expect(await keysOf('Ecosystem')).toEqual(['archived', 'corporationId'])
+      expect(await keysOf('Corporation')).toEqual([])
+      expect(await keysOf('CredentialSchema')).toEqual(['archived', 'ecosystemId'])
+      expect(await keysOf('ServiceEndpoint')).toEqual(['type'])
     })
   })
 
