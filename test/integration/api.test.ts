@@ -557,6 +557,29 @@ describe('read APIs against a bootstrapped graph', () => {
           },
         ],
       })
+
+      await db('participants').where('id', 21).update({ state: 'FUTURE' })
+      const later = await search({
+        surface: 'Did',
+        freeText: 'baby shoes',
+        snippet: { participations: true },
+      })
+      await db('participants').where('id', 21).update({ state: 'ACTIVE' })
+      const laterHits = (later.body as { hits: { snippet: Record<string, unknown> }[] }).hits
+      expect(laterHits[0]?.snippet.participations).toEqual({
+        total: 1,
+        ecosystemCount: 1,
+        byRole: { HOLDER: 1 },
+        entries: [
+          {
+            id: 20,
+            role: 'HOLDER',
+            credentialSchemaId: 100,
+            schemaTitle: 'Service Credential Schema',
+            ecosystemId: 7,
+          },
+        ],
+      })
     })
 
     it('Did ecosystems nest the owned schemas of the controlled Ecosystem', async () => {
@@ -619,7 +642,13 @@ describe('read APIs against a bootstrapped graph', () => {
         'lastObservedAtTime',
         'stats',
       ])
-      expect((snippet.corporation as { id: number }).id).toBe(42)
+      expect(snippet.corporation).toEqual({
+        id: 42,
+        deposit: '50000000uvna',
+        slashedEvents: 0,
+        lastSlashedAtTime: null,
+        slashedValue: null,
+      })
       expect(snippet.stats).toEqual({
         participants: { ISSUER: 1, HOLDER: 2 },
         issuedCredentials: 3,
@@ -713,6 +742,12 @@ describe('read APIs against a bootstrapped graph', () => {
       })
       expect(snippet.ecosystem).toEqual({ id: 7, archived: false })
 
+      await db('ecosystems').where('id', 7).update({ archived: true })
+      const flagged = await search({ surface: 'CredentialSchema' })
+      await db('ecosystems').where('id', 7).update({ archived: false })
+      const flaggedHits = (flagged.body as { hits: { id: number; snippet: Record<string, unknown> }[] }).hits
+      expect(flaggedHits.find(h => h.id === 100)?.snippet.ecosystem).toEqual({ id: 7, archived: true })
+
       const optIn = await search({ surface: 'CredentialSchema', snippet: { body: true, stats: true } })
       expect(validateSearch(optIn.body)).toBe(true)
       const extra =
@@ -741,11 +776,31 @@ describe('read APIs against a bootstrapped graph', () => {
       expect((snippet.didCard as { service: { name: string } }).service.name).toBe('Baby Shoes Shop')
     })
 
+    it('an expired DID shows as expired in its card and in the owned DID entries', async () => {
+      await db('dids').where('did', DIDS.issuer).update({ expires_at_time: '2000-01-01T00:00:00Z' })
+      const endpoints = await search({ surface: 'ServiceEndpoint', filters: { type: 'did-communication' } })
+      const corp = await search({ surface: 'Corporation', snippet: { dids: true } })
+      await db('dids').where('did', DIDS.issuer).update({ expires_at_time: '2100-01-01T00:00:00Z' })
+
+      const endpointHits = (endpoints.body as { hits: { id: string; snippet: Record<string, unknown> }[] })
+        .hits
+      const card = endpointHits.find(h => h.id === `${DIDS.issuer}#didcomm`)?.snippet.didCard
+      expect((card as { isTrustExpired: boolean }).isTrustExpired).toBe(true)
+      const corpHits = (corp.body as { hits: { snippet: { dids: { entries: unknown[] } } }[] }).hits
+      expect(corpHits[0]?.snippet.dids.entries).toContainEqual({
+        did: DIDS.issuer,
+        trusted: true,
+        isTrustExpired: true,
+      })
+    })
+
     it('unknown, foreign and non-boolean selector keys are rejected', async () => {
       for (const snippet of [{ nope: true }, { didCard: true }, { service: 'yes' }]) {
         const { status, body } = await search({ surface: 'Did', snippet })
         expect(status).toBe(400)
-        expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
+        const error = (body as { error: { code: string; message: string } }).error
+        expect(error.code).toBe('INVALID_INPUT')
+        expect(error.message).toContain('/snippet')
       }
     })
 
