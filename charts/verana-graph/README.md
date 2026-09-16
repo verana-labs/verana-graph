@@ -58,6 +58,7 @@ helm install graph ./charts/verana-graph --namespace verana --create-namespace \
 | `config.indexerBaseUrl` | `http://idx:3001` | Upstream indexer |
 | `config.indexerWsUrl` | `""` | Derived from `config.indexerBaseUrl` when empty |
 | `config.trustRefreshIntervalMs` | `"300000"` | Trust-refresh sweep, `"0"` disables it |
+| `config.fetchVpBodies` | `"true"` | Fetch linked VP bodies for credential claims and search text (TG-DEREF-3) |
 | `config.gateServiceEndpoints` | `"false"` | Gate ServiceEndpoint results on owner trust |
 | `database.enabled` | `true` | Provision an in-cluster Postgres; set `false` for external |
 | `database.host` | `""` | External Postgres host, used **only** when `enabled: false` |

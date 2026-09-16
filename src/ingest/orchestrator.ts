@@ -342,7 +342,7 @@ export class IngestOrchestrator {
     }
     if (response) {
       const loads = await reconcile(trx, response, evidence)
-      this.queueDeref(response, loads, evidence, postCommit)
+      this.queueDeref(response, loads, evidence, postCommit, envelope.presentations === true)
     }
   }
 
@@ -365,6 +365,7 @@ export class IngestOrchestrator {
     loads: Parameters<Dereferencer['loadSchemas']>[0],
     evidence: { block: number; blockTime: string },
     postCommit: (() => Promise<void>)[],
+    fetchVp = true,
   ): void {
     if (loads.length > 0) postCommit.push(() => this.deref.loadSchemas(loads))
     if (response.corporation?.cgf) {
@@ -374,7 +375,7 @@ export class IngestOrchestrator {
     for (const eco of response.ecosystems ?? []) {
       if (eco.egf) postCommit.push(() => this.deref.fetchGfDocs('egf', eco.id, eco.egf ?? null))
     }
-    if ((response.presentations ?? []).length > 0) {
+    if (fetchVp && (response.presentations ?? []).length > 0) {
       const p = response.presentations as NonNullable<typeof response.presentations>
       postCommit.push(() => this.deref.fetchVpBodies(response.did, p, evidence.block))
     }
