@@ -134,6 +134,17 @@ export async function vtcTextForDid(trx: Knex, did: string): Promise<string | nu
   return text.length ? text : null
 }
 
+export const DID_TEXT_SQL = `nullif(concat_ws(' ', d.sc_name, d.sc_description, coalesce(d.org_name, d.persona_name)), '')`
+
+export async function refreshDidText(trx: Knex, did?: string): Promise<void> {
+  for (const table of ['ecosystems', 'corporations']) {
+    await trx.raw(
+      `UPDATE ${table} t SET did_text = ${DID_TEXT_SQL} FROM dids d WHERE d.did = t.did${did === undefined ? '' : ' AND d.did = ?'}`,
+      did === undefined ? [] : [did],
+    )
+  }
+}
+
 export function extractSubjectText(credentialSubject: Record<string, unknown>): string | null {
   const parts: string[] = []
   const walk = (v: unknown): void => {

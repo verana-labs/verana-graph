@@ -103,7 +103,9 @@ export class IngestOrchestrator {
     for (const { did } of rows) {
       try {
         const response = await this.rest.resolve(did, block)
-        await this.applyResponse(response, evidence)
+        const run = this.applyChain.then(() => this.applyResponse(response, evidence))
+        this.applyChain = run.catch(() => undefined)
+        await run
         refreshed++
       } catch (err) {
         this.log.warn({ did, err: (err as Error).message }, 'trust refresh resolve failed')
