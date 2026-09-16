@@ -90,6 +90,27 @@ export function corpSnapshot(): ResolveResponse {
         documents: [{ language: 'en', url: 'https://mock.example/cgf.md', digestSri: 'sha384-unfetched2' }],
       },
     },
+    ecsCredentials: [
+      {
+        id: 'urn:cred:org:corp',
+        ecsSchema: 'OrganizationCredential',
+        ecsSchemaVersion: 'v4',
+        digestJCS: 'ZGlnZXN0LTQ=',
+        issuedAtTime: T0,
+        credentialSchemaId: 101,
+        issuerParticipantId: 10,
+        ecosystemId: 7,
+        participantId: 13,
+        validFrom: T0,
+        validUntil: null,
+        credentialSubject: {
+          id: DIDS.corp,
+          name: 'Verana Holdings SA',
+          countryCode: 'CH',
+          address: 'Rue du Mont-Blanc 1, Geneva',
+        },
+      },
+    ],
   }
 }
 
@@ -109,6 +130,30 @@ export function ecoSnapshot(archived101 = false): ResolveResponse {
       },
     ],
     ecosystems: ecosystemSection(archived101),
+    ecsCredentials: [
+      {
+        id: 'urn:cred:sc:eco',
+        ecsSchema: 'ServiceCredential',
+        ecsSchemaVersion: 'v4',
+        digestJCS: 'ZGlnZXN0LTM=',
+        issuedAtTime: T0,
+        credentialSchemaId: 100,
+        issuerParticipantId: 10,
+        ecosystemId: 7,
+        participantId: 1,
+        validFrom: T0,
+        validUntil: null,
+        credentialSubject: {
+          id: DIDS.eco,
+          name: 'EU Banking Registry',
+          type: 'TrustRegistry',
+          description: 'Register of supervised banks',
+          logoUri: 'https://eco.mock/logo.png',
+          logoDigestSri: 'sha256-ZWNv',
+          minimumAgeRequired: 0,
+        },
+      },
+    ],
   }
 }
 
@@ -227,6 +272,8 @@ export function vsSnapshot(withVp = true): ResolveResponse {
           name: 'Baby Shoes Shop',
           type: 'ECommerce',
           description: 'We sell baby shoes in Bogota',
+          logoUri: 'https://vs.mock/logo.png',
+          logoDigestSri: 'sha256-dGVzdA==',
           minimumAgeRequired: 0,
         },
       },

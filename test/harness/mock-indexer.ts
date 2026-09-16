@@ -13,10 +13,12 @@ export interface MockWorld {
   blocks: BlockMessage[]
   readyBlock: number
   blockIntervalMs: number
+  vpBodies?: Map<string, unknown>
 }
 
 export class MockIndexer {
   readonly resolveCalls: { did: string; height: number }[] = []
+  readonly vpHits: string[] = []
   private server!: Server
   private wss!: WebSocketServer
   private sockets = new Set<WebSocket>()
@@ -88,6 +90,13 @@ export class MockIndexer {
         if (!body) return json(404, { error: 'unknown schema' })
         res.writeHead(200, { 'content-type': 'application/schema+json' })
         return res.end(body)
+      }
+      const vpMatch = url.pathname.match(/^\/vp\/(.+)$/)
+      if (vpMatch) {
+        const body = this.world.vpBodies?.get(vpMatch[1] as string)
+        if (!body) return json(404, { error: 'unknown vp' })
+        this.vpHits.push(vpMatch[1] as string)
+        return json(200, body)
       }
       json(404, { error: `no route ${url.pathname}` })
     })
