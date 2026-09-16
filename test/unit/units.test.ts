@@ -23,6 +23,7 @@ describe('cursor', () => {
     const c = queryHash({ surface: 'Did', filters: { x: 2 } })
     expect(a).toBe(b)
     expect(a).not.toBe(c)
+    expect(queryHash({ surface: 'Did', snippet: { service: true } })).toBe(queryHash({ surface: 'Did' }))
   })
 })
 

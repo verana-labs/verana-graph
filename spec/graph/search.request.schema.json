@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://verana.io/schemas/v4/graph/search/request.schema.json",
   "title": "SearchRequest",
-  "description": "Request payload for the verana-graph faceted-search endpoint `POST /v4/graph/search` (per [TG-FCT-1] through [TG-FCT-7]). Filter field names use the dotted form from [TG-FCT-3] / [TG-FCT-4]. Filter values are either bare scalars (interpreted as `eq`) or operator objects (`{ eq | in | range | prefix | contains | containsAny }`). Per [TG-FCT-7] pagination is cursor-based; offset-based pagination MUST NOT be used. See `### Search REST binding` in the verana-graph spec.",
+  "description": "Request payload for the verana-graph faceted-search endpoint `POST /v4/graph/search` (per [TG-FCT-1] through [TG-FCT-7]). Filter field names use the dotted form from [TG-FCT-3] / [TG-FCT-4]. Filter values are either bare scalars (interpreted as `eq`) or operator objects (`{ eq | in | range | prefix | contains | containsAny }`). The optional `snippet` selector projects the queried surface's [TG-FCT-6b] field groups onto its hits per [TG-FCT-6c], validated per surface via the root `allOf` branches. Per [TG-FCT-7] pagination is cursor-based; offset-based pagination MUST NOT be used. See `### Search REST binding` in the verana-graph spec.",
   "type": "object",
   "additionalProperties": false,
   "required": ["surface"],
@@ -18,7 +18,11 @@
     },
     "freeText": {
       "type": "string",
-      "description": "Free-form lexical query string. Scored against the fields enumerated in [TG-FCT-4]."
+      "description": "Free-form lexical query string. Scored against the fields enumerated in [TG-FCT-4], with the matching baseline of [TG-FCT-4a]: case-insensitive, whole-token (no implied substring matching; optional prefix matching on the final token), conjunctive across tokens (every token must match at least one scored field of the hit). Absent, empty, or whitespace-only means no lexical constraint (filters and gates only)."
+    },
+    "snippet": {
+      "type": "object",
+      "description": "Snippet projection per [TG-FCT-6c]: keys are group names of the QUERIED surface's [TG-FCT-6b] catalogue, values are booleans. Enforced per surface by the root `allOf` branches below (a key from another surface's catalogue, or any unknown key, is INVALID_INPUT). When omitted, the surface's default set is returned (`Did`: service, operator, corporation, endpoints; `Ecosystem`: corporation, stats, didCard; `Corporation`: trust, didCard; `CredentialSchema`: schema, ecosystem; `ServiceEndpoint`: didCard). When present, exactly the groups set `true` are returned (plus the always-present [TG-FCT-6a] core); groups not set `true` are omitted from the snippet entirely, and `{}` returns the core alone."
     },
     "limit": {
       "type": "integer",
@@ -42,9 +46,73 @@
       "description": "Override the [TG-FCT-2] default `archived = false` gate on `Ecosystem` and `CredentialSchema` surfaces. Has no effect on other surfaces."
     }
   },
+  "allOf": [
+    { "if": { "properties": { "surface": { "const": "Did" } }, "required": ["surface"] },              "then": { "properties": { "snippet": { "$ref": "#/$defs/SnippetSelectorDid" } } } },
+    { "if": { "properties": { "surface": { "const": "Ecosystem" } }, "required": ["surface"] },        "then": { "properties": { "snippet": { "$ref": "#/$defs/SnippetSelectorEcosystem" } } } },
+    { "if": { "properties": { "surface": { "const": "Corporation" } }, "required": ["surface"] },      "then": { "properties": { "snippet": { "$ref": "#/$defs/SnippetSelectorCorporation" } } } },
+    { "if": { "properties": { "surface": { "const": "CredentialSchema" } }, "required": ["surface"] }, "then": { "properties": { "snippet": { "$ref": "#/$defs/SnippetSelectorCredentialSchema" } } } },
+    { "if": { "properties": { "surface": { "const": "ServiceEndpoint" } }, "required": ["surface"] },  "then": { "properties": { "snippet": { "$ref": "#/$defs/SnippetSelectorServiceEndpoint" } } } }
+  ],
   "$defs": {
     "SearchSurface": {
       "enum": ["Did", "Ecosystem", "Corporation", "CredentialSchema", "ServiceEndpoint"]
+    },
+    "SnippetSelectorDid": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "[TG-FCT-6b] `Did` surface groups. Default set: service, operator, corporation, endpoints.",
+      "properties": {
+        "service": { "type": "boolean", "description": "VS-level identity from the ServiceCredential: pattern, name, type, description, logo." },
+        "operator": { "type": "boolean", "description": "Operative ORG-or-PERSONA identity the trust chain rests on: kind, name, logo, countryCode, registryId, address." },
+        "corporation": { "type": "boolean", "description": "Owner Corporation identity and trust signals: id, deposit, slash history." },
+        "endpoints": { "type": "boolean", "description": "The DID Document's declared service endpoints ({ id, type, serviceEndpoint })." },
+        "ecosystems": { "type": "boolean", "description": "Ecosystem entries controlled by this DID, each with per-role participant counts and its owned schemas ({ id, title, archived, participants })." },
+        "participations": { "type": "boolean", "description": "The DID's ACTIVE Participant entries: { total, ecosystemCount, byRole, entries[{ id, role, credentialSchemaId, schemaTitle, ecosystemId }] }." },
+        "credentials": { "type": "boolean", "description": "Non-ECS VTCs presented by the DID: { total, entries[{ id, credentialSchemaId, schemaTitle, ecosystemId, attributes }] }. ECS credentials never appear here (see the service / operator groups)." }
+      }
+    },
+    "SnippetSelectorEcosystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "[TG-FCT-6b] `Ecosystem` surface groups. Default set: corporation, stats, didCard.",
+      "properties": {
+        "corporation": { "type": "boolean", "description": "Controlling Corporation identity and trust signals via `Ecosystem.corporationId` (same field set as the Did-surface corporation group)." },
+        "stats": { "type": "boolean", "description": "Entity-table counters: participants (per-role map), issuedCredentials, verifiedCredentials." },
+        "governance": { "type": "boolean", "description": "Inline `egf` summary { version, activeSince, documents[] } — metadata only, no bodies; null when no GF published." },
+        "schemas": { "type": "boolean", "description": "Owned schemas ({ id, title, archived, participants }), one entry per `Ecosystem.credentialSchemaIds[]` member." },
+        "didCard": { "type": "boolean", "description": "The controller DID rendered as a card: { did, trusted, isTrustExpired, service, operator }." }
+      }
+    },
+    "SnippetSelectorCorporation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "[TG-FCT-6b] `Corporation` surface groups. Default set: trust, didCard.",
+      "properties": {
+        "trust": { "type": "boolean", "description": "{ policyAddress, deposit, slashedEvents, lastSlashedAtTime, slashedValue } from the Corporation record." },
+        "governance": { "type": "boolean", "description": "Inline `cgf` summary — same shape as the Ecosystem governance group; null when no GF published." },
+        "ecosystems": { "type": "boolean", "description": "Controlled Ecosystems: { total, entries[{ id, archived }] }." },
+        "dids": { "type": "boolean", "description": "Owned DIDs per the VPR DID ownership invariant: { total, entries[{ did, trusted, isTrustExpired }] } — unbounded, truncation escape applies." },
+        "didCard": { "type": "boolean", "description": "The Corporation's own DID rendered as a card: { did, trusted, isTrustExpired, service, operator }." }
+      }
+    },
+    "SnippetSelectorCredentialSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "[TG-FCT-6b] `CredentialSchema` surface groups. Default set: schema, ecosystem. Not DID-bound: no didCard.",
+      "properties": {
+        "schema": { "type": "boolean", "description": "{ type, digestSri, title, description } — title/description from the loaded body (null when the body declares none)." },
+        "ecosystem": { "type": "boolean", "description": "{ id, archived } of the owning Ecosystem (exactly one, per [TG-EDGE-3])." },
+        "stats": { "type": "boolean", "description": "Entity-table counters: participants (per-role map), issuedCredentials, verifiedCredentials." },
+        "body": { "type": "boolean", "description": "The full loaded JSON Schema body, verbatim. Opt-in purely for wire weight; never null once the record exists ([TG-DEREF-2])." }
+      }
+    },
+    "SnippetSelectorServiceEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "[TG-FCT-6b] `ServiceEndpoint` surface groups. Default set: didCard (the only group).",
+      "properties": {
+        "didCard": { "type": "boolean", "description": "The owning DID (`didId`) rendered as a card: { did, trusted, isTrustExpired, service, operator }." }
+      }
     },
     "Scalar": {
       "description": "anyOf, not oneOf: a JSON integer matches both `number` and `integer`, so a oneOf over both branches rejects every integer.",

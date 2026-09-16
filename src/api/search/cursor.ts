@@ -21,7 +21,7 @@ export function stableStringify(v: unknown): string {
 // the cursor is bound to the query it came from; reuse under a different query is an explicit
 // error, never a silent re-anchor (TG-FCT-7)
 export function queryHash(request: Record<string, unknown>): string {
-  const { cursor: _cursor, limit: _limit, ...rest } = request
+  const { cursor: _cursor, limit: _limit, snippet: _snippet, ...rest } = request
   return createHash('sha256').update(stableStringify(rest)).digest('hex').slice(0, 16)
 }
 
