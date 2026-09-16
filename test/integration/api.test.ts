@@ -13,7 +13,7 @@ import { Dereferencer } from '../../src/deref/deref'
 import { IndexerRestClient } from '../../src/indexer/rest'
 import { IngestOrchestrator } from '../../src/ingest/orchestrator'
 import { createLogger } from '../../src/util/logger'
-import { buildWorld, DIDS, issuerSnapshot } from '../harness/fixture'
+import { buildWorld, DIDS, DIGESTS, issuerSnapshot, SCHEMA_BODIES } from '../harness/fixture'
 import { block, MockIndexer } from '../harness/mock-indexer'
 import { freshDb, testConfig, waitFor } from '../harness/setup'
 
@@ -424,6 +424,359 @@ describe('read APIs against a bootstrapped graph', () => {
       })
       expect((body as { hits: { id: number }[] }).hits.map(h => h.id)).toEqual([7])
       expect(validateSearch(body)).toBe(true)
+    })
+  })
+
+  describe('snippet projection (TG-FCT-6a/6b/6c)', () => {
+    it('Did defaults carry the core plus service, operator, corporation and endpoints', async () => {
+      const { status, body } = await search({ surface: 'Did', freeText: 'baby shoes' })
+      expect(status).toBe(200)
+      expect(validateSearch(body)).toBe(true)
+      const hits = (body as { hits: { id: string; snippet: Record<string, unknown> }[] }).hits
+      expect(hits.map(h => h.id)).toEqual([DIDS.vs])
+      const snippet = hits[0]?.snippet ?? {}
+      expect(Object.keys(snippet).sort()).toEqual([
+        'corporation',
+        'did',
+        'endpoints',
+        'isCorporation',
+        'isEcosystem',
+        'isTrustExpired',
+        'lastObservedAtTime',
+        'operator',
+        'service',
+        'trusted',
+      ])
+      expect(snippet.service).toEqual({
+        pattern: 'B',
+        name: 'Baby Shoes Shop',
+        type: 'ECommerce',
+        description: 'We sell baby shoes in Bogota',
+        logoUri: 'https://vs.mock/logo.png',
+        logoDigestSri: 'sha256-dGVzdA==',
+      })
+      expect(snippet.operator).toEqual({
+        kind: 'Organization',
+        name: 'Acme GmbH',
+        logoUri: null,
+        logoDigestSri: null,
+        countryCode: 'DE',
+        registryId: 'HRB-12345',
+        address: 'Alexanderplatz 1, Berlin',
+      })
+      expect(snippet.corporation).toEqual({
+        id: 42,
+        deposit: '50000000uvna',
+        slashedEvents: 0,
+        lastSlashedAtTime: null,
+        slashedValue: null,
+      })
+      expect(snippet.endpoints).toEqual([
+        { id: 'did:mock:vs#didcomm', type: 'did-communication', serviceEndpoint: 'https://vs.mock/didcomm' },
+        { id: 'did:mock:vs#mcp', type: 'MCP', serviceEndpoint: 'https://vs.mock/mcp' },
+      ])
+    })
+
+    it('an empty selector leaves the Did core and its visibility flags in place', async () => {
+      const { body } = await search({ surface: 'Did', includeUntrusted: true, snippet: {} })
+      expect(validateSearch(body)).toBe(true)
+      const hits = (body as { hits: { id: string; snippet: Record<string, unknown> }[] }).hits
+      const snippet = hits.find(h => h.id === DIDS.corp)?.snippet ?? {}
+      expect(Object.keys(snippet).sort()).toEqual([
+        'did',
+        'isCorporation',
+        'isEcosystem',
+        'isTrustExpired',
+        'lastObservedAtTime',
+        'trusted',
+      ])
+      expect(snippet.isCorporation).toBe(true)
+      expect(snippet.trusted).toBe(false)
+    })
+
+    it('a false value behaves like an absent group', async () => {
+      const { body } = await search({
+        surface: 'Did',
+        freeText: 'baby shoes',
+        snippet: { service: false, operator: true },
+      })
+      expect(validateSearch(body)).toBe(true)
+      const hits = (body as { hits: { snippet: Record<string, unknown> }[] }).hits
+      const snippet = hits[0]?.snippet ?? {}
+      expect(Object.keys(snippet).sort()).toEqual([
+        'did',
+        'isCorporation',
+        'isEcosystem',
+        'isTrustExpired',
+        'lastObservedAtTime',
+        'operator',
+        'trusted',
+      ])
+    })
+
+    it('Did opt-in groups list participations and presented credentials', async () => {
+      const { body } = await search({
+        surface: 'Did',
+        freeText: 'baby shoes',
+        snippet: { ecosystems: true, participations: true, credentials: true },
+      })
+      expect(validateSearch(body)).toBe(true)
+      const hits = (body as { hits: { snippet: Record<string, unknown> }[] }).hits
+      const snippet = hits[0]?.snippet ?? {}
+      expect(snippet.ecosystems).toEqual([])
+      expect(snippet.participations).toEqual({
+        total: 2,
+        ecosystemCount: 1,
+        byRole: { HOLDER: 2 },
+        entries: [
+          {
+            id: 20,
+            role: 'HOLDER',
+            credentialSchemaId: 100,
+            schemaTitle: 'Service Credential Schema',
+            ecosystemId: 7,
+          },
+          {
+            id: 21,
+            role: 'HOLDER',
+            credentialSchemaId: 101,
+            schemaTitle: 'Organization Credential Schema',
+            ecosystemId: 7,
+          },
+        ],
+      })
+      expect(snippet.credentials).toEqual({
+        total: 1,
+        entries: [
+          {
+            id: 'urn:vtc:cert:vs',
+            credentialSchemaId: 101,
+            schemaTitle: 'Organization Credential Schema',
+            ecosystemId: 7,
+            attributes: null,
+          },
+        ],
+      })
+    })
+
+    it('Did ecosystems nest the owned schemas of the controlled Ecosystem', async () => {
+      const { body } = await search({ surface: 'Did', includeUntrusted: true, snippet: { ecosystems: true } })
+      expect(validateSearch(body)).toBe(true)
+      const hits = (body as { hits: { id: string; snippet: Record<string, unknown> }[] }).hits
+      const snippet = hits.find(h => h.id === DIDS.eco)?.snippet ?? {}
+      expect(snippet.isEcosystem).toBe(true)
+      expect(snippet.ecosystems).toEqual([
+        {
+          id: 7,
+          archived: false,
+          participants: { ISSUER: 1, HOLDER: 2 },
+          schemas: [
+            { id: 100, title: 'Service Credential Schema', archived: false, participants: {} },
+            { id: 101, title: 'Organization Credential Schema', archived: false, participants: {} },
+          ],
+        },
+      ])
+    })
+
+    it('a DID with nothing attached gets the documented empty forms', async () => {
+      const { body } = await search({
+        surface: 'Did',
+        includeUntrusted: true,
+        filters: { 'Did.corporationId': 42 },
+        snippet: {
+          service: true,
+          operator: true,
+          corporation: true,
+          endpoints: true,
+          ecosystems: true,
+          participations: true,
+          credentials: true,
+        },
+      })
+      expect(validateSearch(body)).toBe(true)
+      const hits = (body as { hits: { id: string; snippet: Record<string, unknown> }[] }).hits
+      const snippet = hits.find(h => h.id === DIDS.plain)?.snippet ?? {}
+      expect(snippet.service).toBeNull()
+      expect(snippet.operator).toBeNull()
+      expect(snippet.endpoints).toEqual([])
+      expect(snippet.ecosystems).toEqual([])
+      expect(snippet.participations).toEqual({ total: 0, ecosystemCount: 0, byRole: {}, entries: [] })
+      expect(snippet.credentials).toEqual({ total: 0, entries: [] })
+    })
+
+    it('Ecosystem defaults and the governance and schemas opt-ins', async () => {
+      const { body } = await search({ surface: 'Ecosystem' })
+      expect(validateSearch(body)).toBe(true)
+      const hits = (body as { hits: { id: number; snippet: Record<string, unknown> }[] }).hits
+      expect(hits.map(h => h.id)).toEqual([7])
+      const snippet = hits[0]?.snippet ?? {}
+      expect(Object.keys(snippet).sort()).toEqual([
+        'archived',
+        'corporation',
+        'did',
+        'didCard',
+        'id',
+        'lastObservedAtTime',
+        'stats',
+      ])
+      expect((snippet.corporation as { id: number }).id).toBe(42)
+      expect(snippet.stats).toEqual({
+        participants: { ISSUER: 1, HOLDER: 2 },
+        issuedCredentials: 3,
+        verifiedCredentials: 5,
+      })
+      expect(snippet.didCard).toEqual({
+        did: DIDS.eco,
+        trusted: false,
+        isTrustExpired: false,
+        service: {
+          pattern: 'B',
+          name: 'EU Banking Registry',
+          type: 'TrustRegistry',
+          description: 'Register of supervised banks',
+          logoUri: 'https://eco.mock/logo.png',
+          logoDigestSri: 'sha256-ZWNv',
+        },
+        operator: {
+          kind: 'Organization',
+          name: 'Acme GmbH',
+          logoUri: null,
+          logoDigestSri: null,
+          countryCode: 'DE',
+          registryId: 'HRB-12345',
+          address: 'Alexanderplatz 1, Berlin',
+        },
+      })
+
+      const optIn = await search({ surface: 'Ecosystem', snippet: { governance: true, schemas: true } })
+      expect(validateSearch(optIn.body)).toBe(true)
+      const extra = (optIn.body as { hits: { snippet: Record<string, unknown> }[] }).hits[0]?.snippet ?? {}
+      expect(extra.governance).toEqual({
+        version: 1,
+        activeSince: '2023-11-14T00:00:00Z',
+        documents: [{ language: 'en', url: 'https://mock.example/egf.md', digestSri: 'sha384-unfetched' }],
+      })
+      expect(extra.schemas).toEqual([
+        { id: 100, title: 'Service Credential Schema', archived: false, participants: {} },
+        { id: 101, title: 'Organization Credential Schema', archived: false, participants: {} },
+      ])
+    })
+
+    it('Corporation defaults and the governance, ecosystems and dids opt-ins', async () => {
+      const { body } = await search({ surface: 'Corporation' })
+      expect(validateSearch(body)).toBe(true)
+      const hits = (body as { hits: { id: number; snippet: Record<string, unknown> }[] }).hits
+      expect(hits.map(h => h.id)).toEqual([42])
+      const snippet = hits[0]?.snippet ?? {}
+      expect(Object.keys(snippet).sort()).toEqual(['did', 'didCard', 'id', 'lastObservedAtTime', 'trust'])
+      expect(snippet.trust).toEqual({
+        policyAddress: 'verana1mockpolicyaddress',
+        deposit: '50000000uvna',
+        slashedEvents: 0,
+        lastSlashedAtTime: null,
+        slashedValue: null,
+      })
+      const card = snippet.didCard as { service: unknown; operator: { name: string } }
+      expect(card.service).toBeNull()
+      expect(card.operator.name).toBe('Verana Holdings SA')
+
+      const optIn = await search({
+        surface: 'Corporation',
+        snippet: { governance: true, ecosystems: true, dids: true },
+      })
+      expect(validateSearch(optIn.body)).toBe(true)
+      const extra = (optIn.body as { hits: { snippet: Record<string, unknown> }[] }).hits[0]?.snippet ?? {}
+      expect((extra.governance as { version: number }).version).toBe(1)
+      expect(extra.ecosystems).toEqual({ total: 1, entries: [{ id: 7, archived: false }] })
+      const dids = extra.dids as { total: number; entries: unknown[] }
+      expect(dids.total).toBe(5)
+      expect(dids.entries).toContainEqual({ did: DIDS.plain, trusted: false, isTrustExpired: false })
+    })
+
+    it('CredentialSchema defaults and the body and stats opt-ins', async () => {
+      const { body } = await search({ surface: 'CredentialSchema' })
+      expect(validateSearch(body)).toBe(true)
+      const hits = (body as { hits: { id: number; snippet: Record<string, unknown> }[] }).hits
+      const snippet = hits.find(h => h.id === 100)?.snippet ?? {}
+      expect(Object.keys(snippet).sort()).toEqual([
+        'archived',
+        'ecosystem',
+        'id',
+        'lastObservedAtTime',
+        'schema',
+      ])
+      expect(snippet.schema).toEqual({
+        type: 'JsonSchema',
+        digestSri: DIGESTS[100],
+        title: 'Service Credential Schema',
+        description: 'ECS service schema for verifiable services',
+      })
+      expect(snippet.ecosystem).toEqual({ id: 7, archived: false })
+
+      const optIn = await search({ surface: 'CredentialSchema', snippet: { body: true, stats: true } })
+      expect(validateSearch(optIn.body)).toBe(true)
+      const extra =
+        (optIn.body as { hits: { id: number; snippet: Record<string, unknown> }[] }).hits.find(
+          h => h.id === 100,
+        )?.snippet ?? {}
+      expect(extra.body).toEqual(JSON.parse(SCHEMA_BODIES[100] as string))
+      expect(extra.stats).toEqual({ participants: {}, issuedCredentials: 0, verifiedCredentials: 0 })
+    })
+
+    it('ServiceEndpoint carries the verbatim endpoint value and the owner card', async () => {
+      const { body } = await search({ surface: 'ServiceEndpoint', filters: { type: 'MCP' } })
+      expect(validateSearch(body)).toBe(true)
+      const hits = (body as { hits: { id: string; snippet: Record<string, unknown> }[] }).hits
+      expect(hits.map(h => h.id)).toEqual(['did:mock:vs#mcp'])
+      const snippet = hits[0]?.snippet ?? {}
+      expect(Object.keys(snippet).sort()).toEqual([
+        'didCard',
+        'didId',
+        'id',
+        'lastObservedAtTime',
+        'serviceEndpoint',
+        'type',
+      ])
+      expect(snippet.serviceEndpoint).toBe('https://vs.mock/mcp')
+      expect((snippet.didCard as { service: { name: string } }).service.name).toBe('Baby Shoes Shop')
+    })
+
+    it('unknown, foreign and non-boolean selector keys are rejected', async () => {
+      for (const snippet of [{ nope: true }, { didCard: true }, { service: 'yes' }]) {
+        const { status, body } = await search({ surface: 'Did', snippet })
+        expect(status).toBe(400)
+        expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
+      }
+    })
+
+    it('the projection never changes totalCount or facets', async () => {
+      const filters = { 'OrganizationCredential.countryCode': 'DE' }
+      const plain = await search({ surface: 'Did', filters })
+      const projected = await search({ surface: 'Did', filters, snippet: { participations: true } })
+      expect(validateSearch(plain.body)).toBe(true)
+      expect(validateSearch(projected.body)).toBe(true)
+      const a = plain.body as { totalCount: number; facets: unknown }
+      const b = projected.body as { totalCount: number; facets: unknown }
+      expect(a.totalCount).toBeGreaterThan(0)
+      expect(b.totalCount).toBe(a.totalCount)
+      expect(b.facets).toEqual(a.facets)
+    })
+
+    it('a cursor minted under one selector pages on under another', async () => {
+      const page1 = await search({ surface: 'Did', includeUntrusted: true, limit: 1, snippet: {} })
+      expect(validateSearch(page1.body)).toBe(true)
+      const b1 = page1.body as { hits: { id: string }[]; cursor: string }
+      const page2 = await search({
+        surface: 'Did',
+        includeUntrusted: true,
+        limit: 1,
+        cursor: b1.cursor,
+        snippet: { service: true },
+      })
+      expect(page2.status).toBe(200)
+      expect(validateSearch(page2.body)).toBe(true)
+      const b2 = page2.body as { hits: { id: string }[] }
+      expect(b2.hits[0]?.id).not.toBe(b1.hits[0]?.id)
     })
   })
 
