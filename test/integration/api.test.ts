@@ -5,6 +5,7 @@ import Fastify, { FastifyInstance } from 'fastify'
 import { Knex } from 'knex'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { WebSocket } from 'ws'
+import { registerDocs } from '../../src/api/docs'
 import { ApiError } from '../../src/api/errors'
 import { registerSearchRoute } from '../../src/api/search/route'
 import { registerTraverseRoute } from '../../src/api/traverse/route'
@@ -57,6 +58,7 @@ describe('read APIs against a bootstrapped graph', () => {
     })
     registerTraverseRoute(app, db)
     registerSearchRoute(app, db, config)
+    registerDocs(app)
     await app.listen({ port: 0 })
     attachBlockProgressServer(app.server, orchestrator, config.bpsMaxBufferedBytes, log)
     const address = app.server.address()
@@ -868,6 +870,23 @@ describe('read APIs against a bootstrapped graph', () => {
       expect(validateSearch(page2.body)).toBe(true)
       const b2 = page2.body as { hits: { id: string }[] }
       expect(b2.hits[0]?.id).not.toBe(b1.hits[0]?.id)
+    })
+  })
+
+  describe('docs', () => {
+    it('the served OpenAPI document carries the snippet schemas and a selector example', async () => {
+      const res = await fetch(`${baseUrl}/docs/openapi.json`)
+      expect(res.status).toBe(200)
+      const doc = (await res.json()) as {
+        components: { schemas: Record<string, unknown> }
+        paths: Record<string, unknown>
+      }
+      expect(doc.components.schemas).toHaveProperty('search_request_SnippetSelectorDid')
+      expect(doc.components.schemas).toHaveProperty('search_response_DidCard')
+      expect(doc.paths['/v4/graph/search']).toHaveProperty(
+        ['post', 'requestBody', 'content', 'application/json', 'examples', 'snippetDid', 'value', 'snippet'],
+        { service: true, operator: true, participations: true, credentials: true },
+      )
     })
   })
 
