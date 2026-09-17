@@ -69,6 +69,19 @@ describe('VP body fetch (TG-DEREF-3)', () => {
     expect(mock.vpHits).toHaveLength(1)
   })
 
+  it('the trust refresh sweep re-resolves without fetching the VP bodies again', async () => {
+    await bootstrapped()
+    mock.pushBlock(block(100, []))
+    await waitFor(
+      async () => (await db('ingestion_state').where('id', 1).first())?.last_applied_block === 100,
+    )
+    await db('dids')
+      .where('did', DIDS.vs)
+      .update({ expires_at_time: new Date(Date.now() - 1000).toISOString() })
+    expect(await orchestrator.refreshExpiredTrust()).toBe(1)
+    expect(mock.vpHits).toHaveLength(1)
+  })
+
   it('TG-DEREF-3: claims without text still persist the credential subject', async () => {
     const subject = { id: DIDS.vs, score: 42 }
     world.vpBodies?.set(
