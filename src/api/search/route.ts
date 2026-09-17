@@ -119,9 +119,32 @@ function schemaRefs(idsExpr: string): string {
     from credential_schemas cs where cs.id = any(${idsExpr}))`
 }
 
+const DID_CARD_COLUMNS = [
+  'did',
+  'trusted',
+  'pattern',
+  'sc_name',
+  'sc_type',
+  'sc_description',
+  'sc_logo_uri',
+  'sc_logo_digest_sri',
+  'operator_kind',
+  'org_name',
+  'org_logo_uri',
+  'org_logo_digest_sri',
+  'org_country_code',
+  'org_registry_id',
+  'org_address',
+  'persona_name',
+  'persona_avatar_uri',
+  'persona_avatar_digest_sri',
+  'persona_country_code',
+]
+
 function didCardSql(boundExpr: string): string {
-  return `(select to_jsonb(bd) - 'search_vec'
-      || jsonb_build_object('is_trust_expired', bd.expires_at_time is not null and bd.expires_at_time < now())
+  const columns = DID_CARD_COLUMNS.map(c => `'${c}', bd.${c}`).join(', ')
+  return `(select jsonb_build_object(${columns},
+      'is_trust_expired', bd.expires_at_time is not null and bd.expires_at_time < now())
     from dids bd where bd.did = ${boundExpr}) as g_did_card`
 }
 
