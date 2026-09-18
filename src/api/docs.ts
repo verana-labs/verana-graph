@@ -61,9 +61,13 @@ export function registerDocs(app: FastifyInstance): void {
 
 **freeText**: ranked full-text match on the surface.
 
-**filters**: object keyed by field. A bare scalar means equals, an array means any-of, or pass an operator object (\`eq\`, \`in\`, \`prefix\`, \`range\`). Fields on the Did surface: \`Did.corporationId\`, \`Did.operatorKind\`, \`EcsCredential.ServiceCredential.type\`, \`EcsCredential.ServiceCredential.minimumAgeRequired\`, \`OrganizationCredential.countryCode\`, \`OrganizationCredential.legalJurisdiction\`, \`OrganizationCredential.organizationKind\`, \`OrganizationCredential.lei\`, \`OrganizationCredential.registryId\`, \`PersonaCredential.controllerCountryCode\`, \`PersonaCredential.controllerJurisdiction\`, \`Participant.ecosystemId\`, \`Participant.credentialSchemaId\`, \`Participant.role\`. An unknown field returns \`UNKNOWN_FILTER_FIELD\`.
+**filters**: object keyed by field. A bare scalar means equals, an array means any-of, or pass an operator object (\`eq\`, \`in\`, \`prefix\`, \`range\`, \`contains\`, \`containsAny\`). Fields on the Did surface: \`Did.trusted\`, \`Did.pattern\`, \`Did.serviceTypes\`, \`Did.corporationId\`, \`Did.isCorporation\`, \`Did.isEcosystem\`, \`Did.ecosystemIds\`, \`Did.operatorKind\`, \`Did.operatorName\`, \`EcsCredential.ServiceCredential.type\`, \`EcsCredential.ServiceCredential.minimumAgeRequired\`, \`OrganizationCredential.countryCode\`, \`OrganizationCredential.legalJurisdiction\`, \`OrganizationCredential.organizationKind\`, \`OrganizationCredential.lei\`, \`OrganizationCredential.registryId\`, \`PersonaCredential.controllerCountryCode\`, \`PersonaCredential.controllerJurisdiction\`, \`Participant.ecosystemId\`, \`Participant.credentialSchemaId\`, \`Participant.role\`. \`Did.serviceTypes\` and \`Did.ecosystemIds\` take \`contains\` or \`containsAny\` only. An unknown field returns \`UNKNOWN_FILTER_FIELD\`.
 
-**limit**: 1..500, default 100. **cursor**: opaque keyset cursor from the previous page, \`nextCursor\` is null on the last page (TG-QRY-6).`,
+**facets**: the response carries one aggregation per \`eq\` or \`in\` filter in the request plus a default set per surface (TG-FCT-6). Did: \`Did.operatorKind\`, \`EcsCredential.ServiceCredential.type\`, \`OrganizationCredential.countryCode\`. Ecosystem: \`archived\`, \`corporationId\`. CredentialSchema: \`archived\`, \`ecosystemId\`. ServiceEndpoint: \`type\`. Corporation has none.
+
+**snippet**: object of group name to boolean, checked against the queried surface (an unknown name or a group of another surface is \`INVALID_INPUT\`). Omit it for the default set, pass \`{}\` for the core alone (TG-FCT-6c). Every hit always carries the core of TG-FCT-6a: Did \`did\`, \`lastObservedAtTime\`, \`isTrustExpired\`, \`trusted\`, \`isCorporation\`, \`isEcosystem\`. Ecosystem \`id\`, \`did\`, \`archived\`, \`lastObservedAtTime\`. Corporation \`id\`, \`did\`, \`lastObservedAtTime\`. CredentialSchema \`id\`, \`archived\`, \`lastObservedAtTime\`. ServiceEndpoint \`id\`, \`didId\`, \`type\`, \`serviceEndpoint\`, \`lastObservedAtTime\`. Groups per surface (TG-FCT-6b), default set first, then opt-in. Did: \`service\`, \`operator\`, \`corporation\`, \`endpoints\`, then \`ecosystems\`, \`participations\`, \`credentials\`. Ecosystem: \`corporation\`, \`stats\`, \`didCard\`, then \`governance\`, \`schemas\`. Corporation: \`trust\`, \`didCard\`, then \`governance\`, \`ecosystems\`, \`dids\`. CredentialSchema: \`schema\`, \`ecosystem\`, then \`stats\`, \`body\`. ServiceEndpoint: \`didCard\`. List groups cap \`entries\` at 100, the counters next to them are never capped.
+
+**limit**: 1..200, default 20. **cursor**: opaque keyset cursor from the previous page, \`cursor\` in the response is null on the last page (TG-FCT-7). The selector never changes the result set, so a cursor stays valid when \`snippet\` changes between pages.`,
           requestBody: {
             required: true,
             content: {
@@ -78,13 +82,26 @@ export function registerDocs(app: FastifyInstance): void {
                     summary: 'Free text over credential schemas',
                     value: { surface: 'CredentialSchema', freeText: 'organization', limit: 3 },
                   },
+                  snippetDid: {
+                    summary: 'Pick the Did groups to return',
+                    value: {
+                      surface: 'Did',
+                      freeText: 'fabrice',
+                      snippet: { service: true, operator: true, participations: true, credentials: true },
+                    },
+                  },
+                  coreOnly: {
+                    summary: 'Core fields only',
+                    value: { surface: 'Ecosystem', snippet: {} },
+                  },
                 },
               },
             },
           },
           responses: {
             '200': {
-              description: 'Ranked hits with keyset pagination',
+              description:
+                'Ranked hits, each with the TG-FCT-6a core plus the projected groups, keyset pagination',
               content: { 'application/json': { schema: loadSchema('search.response.schema.json') } },
             },
             '400': {
