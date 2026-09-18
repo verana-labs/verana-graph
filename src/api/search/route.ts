@@ -506,18 +506,20 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex, config: Conf
       ])
       .limit(limit)
 
-    const rows = (await hitsQuery) as Record<string, unknown>[]
-
-    const { q: countQuery } = base()
-    const countRow = (await countQuery.clearSelect().count('* as n').first()) as { n: string | number }
+    const countQuery = base().q.clearSelect().count('* as n').first()
+    const [rows, countRow, ...facetRows] = await Promise.all([
+      hitsQuery as Promise<Record<string, unknown>[]>,
+      countQuery as unknown as Promise<{ n: string | number }>,
+      ...facetSpecs.map(
+        ([, facetFn]) => facetFn(base().q, db) as Promise<{ value: unknown; count: string | number }[]>,
+      ),
+    ])
     const totalCount = Number(countRow.n)
 
     const facets: Record<string, { value: unknown; count: number }[]> = {}
-    for (const [field, facetFn] of facetSpecs) {
-      const { q: facetBase } = base()
-      const rowsF = (await facetFn(facetBase, db)) as { value: unknown; count: string | number }[]
-      facets[field] = rowsF.map(r => ({ value: r.value, count: Number(r.count) }))
-    }
+    facetSpecs.forEach(([field], i) => {
+      facets[field] = (facetRows[i] ?? []).map(r => ({ value: r.value, count: Number(r.count) }))
+    })
 
     const hits = rows.map(r => ({
       type: req.surface,
