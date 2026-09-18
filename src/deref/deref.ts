@@ -125,7 +125,7 @@ export class Dereferencer {
     )
   }
 
-  // TG-DEREF-3 optional VP body fetch, deduplicated per (URL, block) (TG-DEREF-4 mutable tier).
+  // TG-DEREF-3 VP body fetch, deduplicated per (URL, block) (TG-DEREF-4 mutable tier).
   // The fetched body is holder-controlled: its signature is re-verified against the holder's
   // DID Document before any claim is extracted (TG-DEREF-3).
   async fetchVpBodies(did: string, presentations: PresentationEntry[], block: number): Promise<void> {
@@ -147,8 +147,12 @@ export class Dereferencer {
         for (const cred of creds) {
           const c = cred as { id?: string; credentialSubject?: Record<string, unknown> }
           if (!c.id || !wanted.has(c.id) || !c.credentialSubject) continue
-          const text = extractSubjectText(c.credentialSubject)
-          if (text) await this.db('vtcs').where('id', c.id).update({ subject_text: text })
+          await this.db('vtcs')
+            .where('id', c.id)
+            .update({
+              subject_text: extractSubjectText(c.credentialSubject),
+              credential_subject: JSON.stringify(c.credentialSubject),
+            })
         }
       } catch (err) {
         this.log.warn({ vp: p.id, err: (err as Error).message }, 'vp body fetch failed')

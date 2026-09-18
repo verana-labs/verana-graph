@@ -4,6 +4,7 @@ import {
   EMPTY_IDENTITY,
   identityFromCredentials,
   OperativeIdentity,
+  refreshDidText,
   schemaTextForDid,
   serviceFacets,
   vtcTextForDid,
@@ -55,6 +56,7 @@ export async function applyInlineTrust(
   }
   const updated = await db('dids').where({ did }).update(core)
   if (updated === 0) await db('dids').insert({ did, ...core })
+  await refreshDidText(db, did)
 }
 
 // TG-PROV-1: overwrite what changed, stamp freshness, hard-delete per-DID-owned records absent
@@ -390,6 +392,7 @@ async function upsertDid(trx: Knex, r: ResolveResponse, e: Evidence): Promise<vo
     ...freshness(e),
   }
   await trx('dids').insert(row).onConflict('did').merge()
+  await refreshDidText(trx, r.did)
 }
 
 // Bootstrap resolves DIDs concurrently, so cross-DID derivations (pattern, operative identity,
@@ -453,6 +456,7 @@ export async function repairDerivedFacets(db: Knex): Promise<void> {
       GROUP BY p.did_id
     ) sub WHERE dids.did = sub.did_id
   `)
+  await refreshDidText(db)
 }
 
 // Pattern-B DIDs inherit operative identity from their ServiceCredential issuer. When the
@@ -501,5 +505,6 @@ async function refreshDependentDids(trx: Knex, issuerDid: string, e: Evidence): 
         persona_avatar_digest_sri: identity.personaAvatarDigestSri,
         ...freshness(e),
       })
+    await refreshDidText(trx, d.subject_did)
   }
 }

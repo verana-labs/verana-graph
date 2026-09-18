@@ -103,7 +103,9 @@ export class IngestOrchestrator {
     for (const { did } of rows) {
       try {
         const response = await this.rest.resolve(did, block)
-        await this.applyResponse(response, evidence)
+        const run = this.applyChain.then(() => this.applyResponse(response, evidence, { fetchVp: false }))
+        this.applyChain = run.catch(() => undefined)
+        await run
         refreshed++
       } catch (err) {
         this.log.warn({ did, err: (err as Error).message }, 'trust refresh resolve failed')
@@ -199,7 +201,7 @@ export class IngestOrchestrator {
     const runOne = async (did: string): Promise<void> => {
       try {
         const response = await this.rest.resolve(did, snapshotBlock)
-        await this.applyResponse(response, evidence, false)
+        await this.applyResponse(response, evidence, { sweep: false })
       } catch (err) {
         this.log.error({ did, err: (err as Error).message }, 'bootstrap resolve failed')
         throw err
@@ -342,19 +344,19 @@ export class IngestOrchestrator {
     }
     if (response) {
       const loads = await reconcile(trx, response, evidence)
-      this.queueDeref(response, loads, evidence, postCommit)
+      this.queueDeref(response, loads, evidence, postCommit, envelope.presentations === true)
     }
   }
 
   private async applyResponse(
     response: ResolveResponse,
     evidence: { block: number; blockTime: string },
-    sweep = true,
+    { sweep = true, fetchVp = true }: { sweep?: boolean; fetchVp?: boolean } = {},
   ): Promise<void> {
     const postCommit: (() => Promise<void>)[] = []
     await this.db.transaction(async trx => {
       const loads = await reconcile(trx, response, evidence)
-      this.queueDeref(response, loads, evidence, postCommit)
+      this.queueDeref(response, loads, evidence, postCommit, fetchVp)
       if (sweep) await sweepUnreferencedParticipants(trx)
     })
     for (const task of postCommit) await task()
@@ -365,6 +367,7 @@ export class IngestOrchestrator {
     loads: Parameters<Dereferencer['loadSchemas']>[0],
     evidence: { block: number; blockTime: string },
     postCommit: (() => Promise<void>)[],
+    fetchVp = true,
   ): void {
     if (loads.length > 0) postCommit.push(() => this.deref.loadSchemas(loads))
     if (response.corporation?.cgf) {
@@ -374,7 +377,7 @@ export class IngestOrchestrator {
     for (const eco of response.ecosystems ?? []) {
       if (eco.egf) postCommit.push(() => this.deref.fetchGfDocs('egf', eco.id, eco.egf ?? null))
     }
-    if ((response.presentations ?? []).length > 0) {
+    if (fetchVp && (response.presentations ?? []).length > 0) {
       const p = response.presentations as NonNullable<typeof response.presentations>
       postCommit.push(() => this.deref.fetchVpBodies(response.did, p, evidence.block))
     }

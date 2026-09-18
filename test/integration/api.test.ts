@@ -248,7 +248,7 @@ describe('read APIs against a bootstrapped graph', () => {
       const { body } = await traverse('D1', { credentialSchemaId: 101 })
       expectValidTraverse(body)
       const out = (body as { output: { ecsCredentials: unknown[]; vtcs: unknown[] } }).output
-      expect(out.ecsCredentials).toHaveLength(1)
+      expect(out.ecsCredentials).toHaveLength(2)
       expect(out.vtcs).toHaveLength(1)
     })
 
@@ -408,6 +408,13 @@ describe('read APIs against a bootstrapped graph', () => {
       const { status, body } = await search({ surface: 'Did', cursor })
       expect(status).toBe(400)
       expect((body as { error: { code: string } }).error.code).toBe('INVALID_CURSOR')
+    })
+
+    it('TG-FCT-4: free text over the bound DID identity finds the Ecosystem and the Corporation', async () => {
+      const eco = await search({ surface: 'Ecosystem', freeText: 'banking registry' })
+      expect((eco.body as { hits: { id: number }[] }).hits.map(h => h.id)).toEqual([7])
+      const corp = await search({ surface: 'Corporation', freeText: 'Verana Holdings' })
+      expect((corp.body as { hits: { id: number }[] }).hits.map(h => h.id)).toEqual([42])
     })
 
     it('ecosystem surface with participants[role] range filter', async () => {

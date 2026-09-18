@@ -35,7 +35,7 @@ config:
   indexerBaseUrl: http://idx:3001
   indexerWsUrl: ""
   fetchGfDocBodies: "false"
-  fetchVpBodies: "false"
+  fetchVpBodies: "true"
   gateServiceEndpoints: "false"
   gapCoalesceThreshold: "1000"
   bpsMaxBufferedBytes: "1048576"

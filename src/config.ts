@@ -42,7 +42,7 @@ export function loadConfig(): Config {
     indexerWsUrl: process.env.INDEXER_WS_URL || indexerBaseUrl.replace(/^http/, 'ws'),
     port: int('PORT', 3100),
     fetchGfDocBodies: bool('FETCH_GF_DOC_BODIES', false),
-    fetchVpBodies: bool('FETCH_VP_BODIES', false),
+    fetchVpBodies: bool('FETCH_VP_BODIES', true),
     gapCoalesceThreshold: int('GAP_COALESCE_THRESHOLD', 1000),
     bpsMaxBufferedBytes: int('BPS_MAX_BUFFERED_BYTES', 1024 * 1024),
     gateServiceEndpoints: bool('GATE_SERVICE_ENDPOINTS', false),

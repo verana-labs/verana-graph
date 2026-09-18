@@ -4,8 +4,9 @@ import { participantRef } from '../../src/api/refs'
 import { Dereferencer } from '../../src/deref/deref'
 import { IndexerRestClient } from '../../src/indexer/rest'
 import { IngestOrchestrator } from '../../src/ingest/orchestrator'
+import { repairDerivedFacets } from '../../src/ingest/reconciler'
 import { createLogger } from '../../src/util/logger'
-import { buildWorld, DIDS, issuerSnapshot, vsSnapshot } from '../harness/fixture'
+import { buildWorld, DIDS, ecoSnapshot, issuerSnapshot, vsSnapshot } from '../harness/fixture'
 import { block, MockIndexer } from '../harness/mock-indexer'
 import { freshDb, testConfig, waitFor } from '../harness/setup'
 
@@ -136,6 +137,44 @@ describe('ingestion lifecycle', () => {
     await waitFor(async () => {
       const row = await db('dids').where('did', DIDS.vs).first()
       return Boolean(row.schema_text?.includes('Organization Credential Schema'))
+    })
+  })
+
+  it('TG-FCT-4: the bound DID identity text lands on the Ecosystem and Corporation documents', async () => {
+    await bootstrapped()
+    await db('ecosystems').update({ did_text: null })
+    await repairDerivedFacets(db)
+    const eco = await db('ecosystems').where('id', 7).first()
+    expect(eco.did_text).toContain('EU Banking Registry')
+    expect(eco.did_text).toContain('Register of supervised banks')
+    expect(eco.did_text).toContain('Acme GmbH')
+    const corp = await db('corporations').where('id', 42).first()
+    expect(corp.did_text).toContain('Verana Holdings SA')
+  })
+
+  it('TG-FCT-6b refresh: an ecsCredentials envelope of the bound DID rewrites did_text', async () => {
+    await bootstrapped()
+    const snap = structuredClone(ecoSnapshot())
+    const sc = snap.ecsCredentials?.find(c => c.ecsSchema === 'ServiceCredential')
+    if (sc) sc.credentialSubject.name = 'EU Insurance Registry'
+    mock.world.snapshots.get(DIDS.eco)?.set(101, snap)
+    mock.pushBlock(block(101, [{ did: DIDS.eco, ecsCredentials: true }]))
+    await waitFor(async () => {
+      const row = await db('ecosystems').where('id', 7).first()
+      return Boolean(row.did_text?.includes('EU Insurance Registry'))
+    })
+  })
+
+  it('TG-FCT-6b refresh: the operator rename reaches dependents', async () => {
+    await bootstrapped()
+    const snap = structuredClone(issuerSnapshot())
+    const org = snap.ecsCredentials?.find(c => c.ecsSchema === 'OrganizationCredential')
+    if (org) org.credentialSubject.name = 'Acme AG'
+    mock.world.snapshots.get(DIDS.issuer)?.set(102, snap)
+    mock.pushBlock(block(102, [{ did: DIDS.issuer, ecsCredentials: true }]))
+    await waitFor(async () => {
+      const row = await db('ecosystems').where('id', 7).first()
+      return Boolean(row.did_text?.includes('Acme AG'))
     })
   })
 
@@ -278,7 +317,6 @@ describe('ingestion lifecycle', () => {
 
   it('TG-ACT-2: archive flips are observed in both directions and never delete', async () => {
     await bootstrapped()
-    const { ecoSnapshot } = await import('../harness/fixture')
     mock.world.snapshots.get(DIDS.eco)?.set(102, ecoSnapshot(true))
     mock.pushBlock(block(102, [{ did: DIDS.eco, ecosystems: true }]))
     await waitFor(async () => (await db('credential_schemas').where('id', 101).first())?.archived === true)
