@@ -108,6 +108,14 @@ export function registerDocs(app: FastifyInstance): void {
               description: 'TG-ERR-1 error envelope',
               content: { 'application/json': { schema: loadSchema('error.schema.json') } },
             },
+            '404': {
+              description: 'TG-ERR-1 error envelope, UNKNOWN_ID',
+              content: { 'application/json': { schema: loadSchema('error.schema.json') } },
+            },
+            '500': {
+              description: 'TG-ERR-1 error envelope, INTERNAL',
+              content: { 'application/json': { schema: loadSchema('error.schema.json') } },
+            },
           },
         },
       },
@@ -183,6 +191,14 @@ Errors (TG-ERR-1 envelope): \`INVALID_INPUT\`, \`UNKNOWN_QUERY\`, \`UNKNOWN_ID\`
             },
             '400': {
               description: 'TG-ERR-1 error envelope',
+              content: { 'application/json': { schema: loadSchema('error.schema.json') } },
+            },
+            '404': {
+              description: 'TG-ERR-1 error envelope, UNKNOWN_ID',
+              content: { 'application/json': { schema: loadSchema('error.schema.json') } },
+            },
+            '500': {
+              description: 'TG-ERR-1 error envelope, INTERNAL',
               content: { 'application/json': { schema: loadSchema('error.schema.json') } },
             },
           },

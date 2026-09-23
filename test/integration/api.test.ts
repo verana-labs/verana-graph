@@ -291,15 +291,33 @@ describe('read APIs against a bootstrapped graph', () => {
     })
 
     it('TG-ERR-1: unknown ids return UNKNOWN_ID with 404', async () => {
-      const { status, body } = await traverse('A1', { did: 'did:mock:nope' })
-      expect(status).toBe(404)
-      expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_ID')
+      for (const [query, input] of [
+        ['A1', { did: 'did:mock:nope' }],
+        ['C1', { ecosystemId: 1e19 }],
+        ['C1', { ecosystemId: 2 ** 63 }],
+        ['E1', { corporationId: 1e30 }],
+        ['G1', { participantId: 1e19 }],
+      ] as const) {
+        const { status, body } = await traverse(query, input)
+        expect(status, JSON.stringify(input)).toBe(404)
+        expect(validateError(body)).toBe(true)
+        expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_ID')
+      }
     })
 
     it('TG-ERR-1: a malformed input returns INVALID_INPUT with 400', async () => {
-      const { status, body } = await traverse('A1', { nope: true })
-      expect(status).toBe(400)
-      expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
+      for (const [query, input] of [
+        ['A1', { nope: true }],
+        ['A1', { did: 'did:\u0000' }],
+        ['B1', { did: DIDS.vs, credentialId: 'x\u0000' }],
+        ['F1', { from: { type: 'Did', id: 'did:\u0000' }, to: { type: 'Ecosystem', id: 7 } }],
+        ['F1', { from: { type: 'Did', id: DIDS.vs }, to: { type: 'Vtc', id: 'x\u0000' } }],
+      ] as const) {
+        const { status, body } = await traverse(query, input)
+        expect(status, JSON.stringify(input)).toBe(400)
+        expect(validateError(body)).toBe(true)
+        expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
+      }
     })
 
     it('TG-ERR-1: an unknown query selector returns UNKNOWN_QUERY with 400', async () => {

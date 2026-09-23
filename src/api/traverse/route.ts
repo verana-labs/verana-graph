@@ -57,6 +57,15 @@ export function registerTraverseRoute(app: FastifyInstance, db: Knex): void {
       const detail = (validate.errors ?? []).map(e => `${e.instancePath || '/'} ${e.message}`).join('; ')
       throw new ApiError('INVALID_INPUT', `request does not match traverse schema: ${detail}`)
     }
+    const values = Object.values(body.input as object).flatMap(v =>
+      v && typeof v === 'object' ? Object.values(v) : [v],
+    )
+    if (values.some(v => typeof v === 'string' && v.includes('\0'))) {
+      throw new ApiError('INVALID_INPUT', 'input strings must not contain NUL characters')
+    }
+    // ids are int8 columns, so a larger id names no record and would fail the Postgres cast
+    const outOfRange = values.find(v => typeof v === 'number' && v >= 2 ** 63)
+    if (outOfRange !== undefined) throw new ApiError('UNKNOWN_ID', `unknown id ${outOfRange}`)
     const handler = HANDLERS[body.query as string]
     if (!handler) throw new ApiError('UNKNOWN_QUERY', `unknown query ${body.query}`)
     const query = body.query as string
