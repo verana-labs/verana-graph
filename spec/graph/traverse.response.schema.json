@@ -401,7 +401,7 @@
       "properties": {
         "credential": { "$ref": "#/$defs/CredentialAnyRef" },
         "subjectDid": { "$ref": "#/$defs/DidString" },
-        "holderParticipant": { "$ref": "#/$defs/ParticipantRef" }
+        "holderParticipant": { "anyOf": [{ "$ref": "#/$defs/ParticipantRef" }, { "type": "null" }], "description": "`null` for a self-issued credential, which has no HOLDER `Participant`." }
       }
     },
     "C1Output": {

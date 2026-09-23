@@ -257,6 +257,20 @@ describe('read APIs against a bootstrapped graph', () => {
       expect((body as { output: { subjectDid: string } }).output.subjectDid).toBe(DIDS.vs)
     })
 
+    it('B2 returns holderParticipant null for a self-issued credential', async () => {
+      const cred = db('ecs_credentials').where('id', 'urn:cred:sc:vs')
+      await cred.clone().update({ participant_id: 0 })
+      const { status, body } = await traverse('B2', { did: DIDS.vs, credentialId: 'urn:cred:sc:vs' })
+      await cred.clone().update({ participant_id: 20 })
+
+      expect(status).toBe(200)
+      expectValidTraverse(body)
+      expect((body as { output: unknown }).output).toMatchObject({
+        subjectDid: DIDS.vs,
+        holderParticipant: null,
+      })
+    })
+
     it('B1 and B2 match a VTC only among the VTCs the did presents', async () => {
       for (const query of ['B1', 'B2']) {
         const { status, body } = await traverse(query, { did: DIDS.issuer, credentialId: 'urn:vtc:cert:vs' })
@@ -322,6 +336,33 @@ describe('read APIs against a bootstrapped graph', () => {
       })
       expectValidTraverse(body)
       expect((body as { output: unknown }).output).toBeNull()
+    })
+
+    it('F1 from a node to itself is a one-node path', async () => {
+      const { body } = await traverse('F1', {
+        from: { type: 'Did', id: DIDS.vs },
+        to: { type: 'Did', id: DIDS.vs },
+      })
+      expectValidTraverse(body)
+      expect((body as { output: unknown }).output).toEqual([{ node: { type: 'Did', id: DIDS.vs } }])
+    })
+
+    it('F1 neither walks nor returns an expired ECS credential', async () => {
+      const cred = db('ecs_credentials').where('id', 'urn:cred:sc:vs')
+      await cred.clone().update({ subject_did: DIDS.orphan, valid_until: '2000-01-01T00:00:00Z' })
+      const walk = await traverse('F1', {
+        from: { type: 'Did', id: DIDS.orphan },
+        to: { type: 'CredentialSchema', id: 100 },
+      })
+      const endpoint = await traverse('F1', {
+        from: { type: 'EcsCredential', id: 'urn:cred:sc:vs' },
+        to: { type: 'Did', id: DIDS.vs },
+      })
+      await cred.clone().update({ subject_did: DIDS.vs, valid_until: null })
+
+      expect((walk.body as { output: unknown }).output).toBeNull()
+      expect(endpoint.status).toBe(404)
+      expect((endpoint.body as { error: { code: string } }).error.code).toBe('UNKNOWN_ID')
     })
 
     it('F1 walks service, VP and VTC edges', async () => {

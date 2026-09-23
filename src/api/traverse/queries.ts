@@ -264,6 +264,14 @@ export async function b1(db: Knex, input: { did: string; credentialId: string })
 // B2 - holder recovery
 export async function b2(db: Knex, input: { did: string; credentialId: string }): Promise<Json> {
   const found = await findCredential(db, input.did, input.credentialId)
+  // participantId 0 marks a self-issued (Pattern A) credential, which has no HOLDER Participant
+  if (found.kind === 'ecs' && found.row.participant_id === 0) {
+    return {
+      credential: ecsCredentialRef(found.row),
+      subjectDid: found.row.subject_did,
+      holderParticipant: null,
+    }
+  }
   const holder = await db('participants')
     .where('id', found.row.participant_id)
     .first<ParticipantRow | undefined>()
@@ -429,13 +437,17 @@ const CREDENTIAL_TABLES = [
   ['vtcs', 'Vtc'],
 ] as const
 
+function live(db: Knex, table: string): Knex.QueryBuilder {
+  return table === 'ecs_credentials' ? validEcs(db(table)) : db(table)
+}
+
 async function assertNode(db: Knex, n: PathNode): Promise<void> {
   const [table, key, integerKey] = NODE_TABLES[n.type] as [string, string, boolean]
   // checked first: a string id against a bigint key is a Postgres cast error, not a miss
   const typed = integerKey
     ? /^\d+$/.test(String(n.id)) && Number.isSafeInteger(Number(n.id))
     : typeof n.id === 'string'
-  if (!typed || !(await db(table).where(key, n.id).first(key))) {
+  if (!typed || !(await live(db, table).where(key, n.id).first(key))) {
     throw new ApiError('UNKNOWN_ID', `unknown ${n.type} ${n.id}`)
   }
 }
@@ -446,6 +458,7 @@ export async function f1(db: Knex, input: { from: PathNode; to: PathNode }): Pro
   const key = (n: PathNode) => `${n.type}:${NODE_TABLES[n.type]?.[2] ? Number(n.id) : n.id}`
   const start = { node: input.from, path: [] as { node: PathNode; edge?: string }[] }
   const target = key(input.to)
+  if (key(input.from) === target) return [{ node: input.from }] as unknown as Json
   const visited = new Set<string>([key(input.from)])
   let frontier = [start]
 
@@ -478,7 +491,7 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
       if (d) push('Corporation', d.corporation_id, 'OPERATED_BY')
       const parts = await db('participants').where('did_id', n.id).select('id')
       for (const p of parts) push('Participant', p.id, 'PARTICIPATES_IN')
-      const creds = await db('ecs_credentials').where('subject_did', n.id).select('id')
+      const creds = await validEcs(db('ecs_credentials').where('subject_did', n.id)).select('id')
       for (const c of creds) push('EcsCredential', c.id, 'SUBJECT_OF_CREDENTIAL')
       const services = await db('service_endpoints').where('did_id', n.id).select('id')
       for (const s of services) push('ServiceEndpoint', s.id, 'EXPOSES_SERVICE')
@@ -502,7 +515,7 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
         for (const s of eco.credential_schema_ids) push('CredentialSchema', Number(s), 'OWNS_SCHEMA')
       }
       for (const [table, type] of CREDENTIAL_TABLES) {
-        const creds = await db(table).where('ecosystem_id', n.id).select('id')
+        const creds = await live(db, table).where('ecosystem_id', n.id).select('id')
         for (const c of creds) push(type, c.id, 'GOVERNED_BY')
       }
       break
@@ -513,7 +526,7 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
       const parts = await db('participants').where('credential_schema_id', n.id).select('id')
       for (const p of parts) push('Participant', p.id, 'FOR_SCHEMA')
       for (const [table, type] of CREDENTIAL_TABLES) {
-        const creds = await db(table).where('credential_schema_id', n.id).select('id')
+        const creds = await live(db, table).where('credential_schema_id', n.id).select('id')
         for (const c of creds) push(type, c.id, 'BASED_ON_SCHEMA')
       }
       break
@@ -529,9 +542,9 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
       const children = await db('participants').where('validator_participant_id', n.id).select('id')
       for (const c of children) push('Participant', c.id, 'VALIDATED_BY')
       for (const [table, type] of CREDENTIAL_TABLES) {
-        const issued = await db(table).where('issuer_participant_id', n.id).select('id')
+        const issued = await live(db, table).where('issuer_participant_id', n.id).select('id')
         for (const c of issued) push(type, c.id, 'ISSUED_BY')
-        const held = await db(table).where('participant_id', n.id).select('id')
+        const held = await live(db, table).where('participant_id', n.id).select('id')
         for (const c of held) push(type, c.id, 'HELD_AS')
       }
       break
