@@ -215,6 +215,22 @@ describe('ingestion lifecycle', () => {
     expect((await db('ingestion_state').first()).last_applied_block).toBe(100)
   })
 
+  it('TG-INGEST-4: a DID that fails to resolve is skipped and the block still commits', async () => {
+    await bootstrapped()
+    mock.world.snapshots.get(DIDS.plain)?.delete(0)
+    mock.world.snapshots.get(DIDS.issuer)?.set(100, issuerSnapshot(false))
+    mock.pushBlock(
+      block(100, [
+        { did: DIDS.plain, services: true },
+        { did: DIDS.issuer, participations: true },
+      ]),
+    )
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 100)
+    expect(await db('participants').where('id', 11).first()).toBeUndefined()
+    expect(await db('dids').where('did', DIDS.plain).first()).toBeTruthy()
+  })
+
   it('TG-ACT-1: a participant absent from the response is hard-deleted on reconcile', async () => {
     await bootstrapped()
     expect(await db('participants').where('id', 11).first()).toBeTruthy()

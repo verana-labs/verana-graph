@@ -313,8 +313,15 @@ export class IngestOrchestrator {
 
     const resolves = new Map<string, ResolveResponse>()
     for (const envelope of msg.changes) {
-      if (needsResolve(envelope)) {
+      if (!needsResolve(envelope)) continue
+      try {
         resolves.set(envelope.did, await this.rest.resolve(envelope.did, msg.block))
+      } catch (err) {
+        // swallowed: rethrowing replays this block forever while the DID stays unresolvable
+        this.log.error(
+          { did: envelope.did, block: msg.block, err: (err as Error).message },
+          'block resolve failed',
+        )
       }
     }
 
