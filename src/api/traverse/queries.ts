@@ -432,7 +432,9 @@ const CREDENTIAL_TABLES = [
 async function assertNode(db: Knex, n: PathNode): Promise<void> {
   const [table, key, integerKey] = NODE_TABLES[n.type] as [string, string, boolean]
   // checked first: a string id against a bigint key is a Postgres cast error, not a miss
-  const typed = integerKey ? Number.isSafeInteger(n.id) : typeof n.id === 'string'
+  const typed = integerKey
+    ? /^\d+$/.test(String(n.id)) && Number.isSafeInteger(Number(n.id))
+    : typeof n.id === 'string'
   if (!typed || !(await db(table).where(key, n.id).first(key))) {
     throw new ApiError('UNKNOWN_ID', `unknown ${n.type} ${n.id}`)
   }
@@ -495,9 +497,10 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
     }
     case 'Ecosystem': {
       const eco = await db('ecosystems').where('id', n.id).first()
-      if (eco) push('Corporation', eco.corporation_id, 'CONTROLS')
-      const schemas = await db('credential_schemas').where('ecosystem_id', n.id).select('id')
-      for (const s of schemas) push('CredentialSchema', s.id, 'OWNS_SCHEMA')
+      if (eco) {
+        push('Corporation', eco.corporation_id, 'CONTROLS')
+        for (const s of eco.credential_schema_ids) push('CredentialSchema', Number(s), 'OWNS_SCHEMA')
+      }
       for (const [table, type] of CREDENTIAL_TABLES) {
         const creds = await db(table).where('ecosystem_id', n.id).select('id')
         for (const c of creds) push(type, c.id, 'GOVERNED_BY')
@@ -505,8 +508,8 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
       break
     }
     case 'CredentialSchema': {
-      const s = await db('credential_schemas').where('id', n.id).first()
-      if (s) push('Ecosystem', s.ecosystem_id, 'OWNS_SCHEMA')
+      const owners = await db('ecosystems').whereRaw('? = any(credential_schema_ids)', [n.id]).select('id')
+      for (const e of owners) push('Ecosystem', e.id, 'OWNS_SCHEMA')
       const parts = await db('participants').where('credential_schema_id', n.id).select('id')
       for (const p of parts) push('Participant', p.id, 'FOR_SCHEMA')
       for (const [table, type] of CREDENTIAL_TABLES) {

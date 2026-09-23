@@ -349,6 +349,25 @@ describe('read APIs against a bootstrapped graph', () => {
       ])
     })
 
+    it('F1 walks OWNS_SCHEMA to a schema that is not materialised', async () => {
+      const eco = db('ecosystems').where('id', 7)
+      await eco.clone().update({ credential_schema_ids: [100, 101, 998] })
+      await db('participants').where('id', 20).update({ credential_schema_id: 998, corporation_id: 999 })
+      const { body } = await traverse('F1', {
+        from: { type: 'Ecosystem', id: '7' },
+        to: { type: 'Participant', id: 20 },
+      })
+      await eco.clone().update({ credential_schema_ids: [100, 101] })
+      await db('participants').where('id', 20).update({ credential_schema_id: 100, corporation_id: 42 })
+
+      expectValidTraverse(body)
+      expect((body as { output: unknown }).output).toEqual([
+        { node: { type: 'Ecosystem', id: '7' }, edge: 'OWNS_SCHEMA' },
+        { node: { type: 'CredentialSchema', id: 998 }, edge: 'FOR_SCHEMA' },
+        { node: { type: 'Participant', id: 20 } },
+      ])
+    })
+
     it('F1 returns UNKNOWN_ID for an endpoint that resolves to no record', async () => {
       for (const from of [
         { type: 'EcsCredential', id: 'urn:cred:nope' },
