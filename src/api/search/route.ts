@@ -122,11 +122,12 @@ const CORP_SELECTS = [
   'corp.slashed_value as corp_slashed_value',
 ]
 
+// a schema not materialised yet stays in the group as { id } (TG-FCT-6b)
 function schemaRefs(idsExpr: string): string {
-  return `(select coalesce(json_agg(json_build_object(
-      'id', cs.id, 'title', cs.title, 'archived', cs.archived,
-      'participants', coalesce(cs.participants, '{}'::jsonb)) order by cs.id), '[]'::json)
-    from credential_schemas cs where cs.id = any(${idsExpr}))`
+  return `(select coalesce(json_agg(case when cs.id is null then json_build_object('id', s.id)
+      else json_build_object('id', cs.id, 'title', cs.title, 'archived', cs.archived,
+        'participants', coalesce(cs.participants, '{}'::jsonb)) end order by s.id), '[]'::json)
+    from (select distinct unnest(${idsExpr}) as id) s left join credential_schemas cs on cs.id = s.id)`
 }
 
 const DID_CARD_COLUMNS = [
