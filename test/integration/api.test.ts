@@ -416,13 +416,20 @@ describe('read APIs against a bootstrapped graph', () => {
         from: { type: 'EcsCredential', id: 'urn:cred:org:issuer' },
         to: { type: 'Did', id: DIDS.vs },
       })
-      await db('ecs_credentials').where({ id: 'urn:cred:org:issuer', subject_did: DIDS.vs }).delete()
+      const shared = db('ecs_credentials').where({ id: 'urn:cred:org:issuer', subject_did: DIDS.vs })
+      await shared.clone().update({ valid_until: '2000-01-01T00:00:00Z' })
+      const expired = await traverse('F1', {
+        from: { type: 'EcsCredential', id: 'urn:cred:org:issuer' },
+        to: { type: 'Did', id: DIDS.vs },
+      })
+      await shared.clone().delete()
 
       expectValidTraverse(body)
       expect((body as { output: unknown }).output).toEqual([
         { node: { type: 'EcsCredential', id: 'urn:cred:org:issuer' }, edge: 'SUBJECT_OF_CREDENTIAL' },
         { node: { type: 'Did', id: DIDS.vs } },
       ])
+      expect((expired.body as { output: unknown[] }).output).toHaveLength(4)
     })
 
     it('F1 walks OWNS_SCHEMA to a schema that is not materialised', async () => {
