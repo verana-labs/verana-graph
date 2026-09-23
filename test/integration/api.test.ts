@@ -444,6 +444,7 @@ describe('read APIs against a bootstrapped graph', () => {
       expect(await ids({ surface: 'CredentialSchema', freeText: '- "' })).toEqual(
         await ids({ surface: 'CredentialSchema' }),
       )
+      expect(await ids({ surface: 'CredentialSchema', freeText: 'zq'.repeat(1024) })).toEqual([])
       expect(await ids({ surface: 'ServiceEndpoint', freeText: 'vs.mock MCP' })).toEqual(['did:mock:vs#mcp'])
 
       const endpoint = { uri: 'https://relay.example', accept: ['didcomm/v2'] }

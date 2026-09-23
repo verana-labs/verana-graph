@@ -416,6 +416,26 @@ function compileRequestSchema(): ValidateFunction {
   return ajv.compile(schema)
 }
 
+// keeps each tsquery far below the planner's stack depth and the 1MB tsquery operand limit
+const FREE_TEXT_CHUNK = 256
+
+// Postgres drops a word of 2047+ bytes and rejects one that lowercases past that, so it never matches
+async function freeTextChunks(db: Knex, freeText: string): Promise<string[] | null> {
+  const { rows } = await db.raw(
+    `select bool_or(greatest(octet_length(token), octet_length(l)) >= 2047) as unmatchable,
+       coalesce(array_agg(distinct l), '{}') as lexemes
+     from ts_debug('simple', search_tokens(?)), unnest(lexemes) as l`,
+    [freeText],
+  )
+  const { unmatchable, lexemes } = rows[0] as { unmatchable: boolean | null; lexemes: string[] }
+  if (unmatchable) return null
+  const chunks: string[] = []
+  for (let i = 0; i < lexemes.length; i += FREE_TEXT_CHUNK) {
+    chunks.push(lexemes.slice(i, i + FREE_TEXT_CHUNK).join(' '))
+  }
+  return chunks
+}
+
 export function registerSearchRoute(app: FastifyInstance, db: Knex): void {
   const validate = compileRequestSchema()
 
@@ -431,6 +451,7 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex): void {
       : def.defaults
     const groups = Object.entries(def.groups).filter(([name]) => wanted.includes(name))
     const freeText = req.freeText?.trim() || undefined
+    const chunks = freeText ? await freeTextChunks(db, freeText) : undefined
     const limit = req.limit ?? 20
     const hash = queryHash(req as unknown as Record<string, unknown>)
 
@@ -454,21 +475,19 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex): void {
         if (spec.facet && (norm.op === 'eq' || norm.op === 'in')) facetSpecs.push([field, spec.facet])
       }
       if (req.surface === 'Did') applyParticipantExists(q, db)
-      if (freeText) {
-        q.whereRaw(
-          `(numnode(plainto_tsquery('simple', search_tokens(?))) = 0 OR ${def.alias}.search_vec @@ plainto_tsquery('simple', search_tokens(?)))`,
-          [freeText, freeText],
-        )
+      if (chunks === null) q.whereRaw('false')
+      for (const chunk of chunks ?? []) {
+        q.whereRaw(`${def.alias}.search_vec @@ plainto_tsquery('simple', ?)`, [chunk])
       }
       return { q, facetSpecs }
     }
 
     // float8 end to end: NUMERIC scores round-trip through JS as lossy strings and break the
     // keyset boundary comparison
-    const scoreSelect = freeText
-      ? `(ts_rank(${def.alias}.search_vec, plainto_tsquery('simple', search_tokens(?))) * 10 + ${def.scoreExpr})::float8`
+    const scoreSelect = chunks?.length
+      ? `(ts_rank(${def.alias}.search_vec, plainto_tsquery('simple', ?)) * 10 + ${def.scoreExpr})::float8`
       : `(${def.scoreExpr})::float8`
-    const scoreBindings = freeText ? [freeText] : []
+    const scoreBindings = chunks?.slice(0, 1) ?? []
 
     const { q: hitsQuery, facetSpecs } = base()
     for (const field of def.defaultFacets) {
