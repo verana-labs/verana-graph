@@ -214,7 +214,7 @@ describe('ingestion lifecycle', () => {
     expect(holders).toEqual([DIDS.issuer, DIDS.vs])
   })
 
-  it('EcsCredential (subjectDid, id): a same-response duplicate id keeps the OrganizationCredential', async () => {
+  it('EcsCredential (subjectDid, id): a same-response duplicate id keeps the OrganizationCredential in any order', async () => {
     await bootstrapped()
     const snap = structuredClone(issuerSnapshot())
     const [org] = snap.ecsCredentials ?? []
@@ -227,11 +227,14 @@ describe('ingestion lifecycle', () => {
         credentialSubject: { id: DIDS.issuer, name: 'Acme Issuing', type: 'Issuer' },
       })
     }
-    mock.world.snapshots.get(DIDS.issuer)?.set(101, snap)
-    mock.pushBlock(block(101, [{ did: DIDS.issuer, ecsCredentials: true }]))
-    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 101)
-    const rows = await db('ecs_credentials').where({ subject_did: DIDS.issuer, id: 'urn:cred:org:issuer' })
-    expect(rows.map(r => r.ecs_schema)).toEqual(['OrganizationCredential'])
+    for (const height of [101, 102]) {
+      mock.world.snapshots.get(DIDS.issuer)?.set(height, structuredClone(snap))
+      mock.pushBlock(block(height, [{ did: DIDS.issuer, ecsCredentials: true }]))
+      await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === height)
+      const rows = await db('ecs_credentials').where({ subject_did: DIDS.issuer, id: 'urn:cred:org:issuer' })
+      expect(rows.map(r => r.ecs_schema)).toEqual(['OrganizationCredential'])
+      snap.ecsCredentials?.reverse()
+    }
   })
 
   it('TG-INGEST-4: trust-only envelopes apply inline without a resolve call', async () => {
