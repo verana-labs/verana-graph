@@ -649,6 +649,8 @@ describe('read APIs against a bootstrapped graph', () => {
         expect(await ids({ surface: 'Did', freeText: 'plumber' })).toEqual([DIDS.issuer, DIDS.vs])
         expect(await ids({ surface: 'Ecosystem', freeText: 'banking' })).toEqual([7])
         expect(await ids({ surface: 'Ecosystem', freeText: 'acme' })).toEqual([])
+        await db('dids').where('did', DIDS.eco).update({ sc_description: 'Register of supervised banks.eu' })
+        expect(await ids({ surface: 'Ecosystem', freeText: 'banks' })).toEqual([7])
 
         const eco = await search({ surface: 'Ecosystem' })
         const card = (eco.body as { hits: { snippet: { didCard: Record<string, unknown> } }[] }).hits[0]
@@ -658,6 +660,7 @@ describe('read APIs against a bootstrapped graph', () => {
         await db('dids')
           .whereIn('did', [DIDS.vs, DIDS.eco, DIDS.issuer])
           .update({ sc_valid_until: null, operator_valid_until: null })
+        await db('dids').where('did', DIDS.eco).update({ sc_description: 'Register of supervised banks' })
       }
     })
   })

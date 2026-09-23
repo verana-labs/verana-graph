@@ -160,21 +160,21 @@ function didCardSql(boundExpr: string): string {
     from dids bd where bd.did = ${boundExpr}) as g_did_card`
 }
 
-// mirrors the generated search_vec columns (0001, 0009) with the expired ECS parts left out
+// mirrors the generated search_vec columns (0011) with the expired ECS parts left out
 const DID_LIVE_VEC = `(case when ${ecsLive('d', 'sc')} and ${ecsLive('d', 'operator')} then d.search_vec else
-  setweight(to_tsvector('simple', case when ${ecsLive('d', 'sc')}
-    then concat_ws(' ', d.sc_name, d.sc_description) else '' end), 'A') ||
-  setweight(to_tsvector('simple', concat_ws(' ', case when ${ecsLive('d', 'operator')}
+  setweight(to_tsvector('simple', search_tokens(case when ${ecsLive('d', 'sc')}
+    then concat_ws(' ', d.sc_name, d.sc_description) else '' end)), 'A') ||
+  setweight(to_tsvector('simple', search_tokens(concat_ws(' ', case when ${ecsLive('d', 'operator')}
     then concat_ws(' ', d.org_name, d.org_address, d.persona_name, d.persona_description) end,
-    d.vtc_text)), 'B') ||
-  setweight(to_tsvector('simple', coalesce(d.schema_text, '')), 'C') end)`
+    d.vtc_text))), 'B') ||
+  setweight(to_tsvector('simple', search_tokens(coalesce(d.schema_text, ''))), 'C') end)`
 
 function boundLiveVec(alias: string, gfText: string): string {
   return `coalesce((select
-      setweight(to_tsvector('simple', concat_ws(' ',
+      setweight(to_tsvector('simple', search_tokens(concat_ws(' ',
         case when ${ecsLive('bd', 'sc')} then concat_ws(' ', bd.sc_name, bd.sc_description) end,
-        case when ${ecsLive('bd', 'operator')} then coalesce(bd.org_name, bd.persona_name) end)), 'A') ||
-      setweight(to_tsvector('simple', coalesce(${alias}.${gfText}, '')), 'D')
+        case when ${ecsLive('bd', 'operator')} then coalesce(bd.org_name, bd.persona_name) end))), 'A') ||
+      setweight(to_tsvector('simple', search_tokens(coalesce(${alias}.${gfText}, ''))), 'D')
     from dids bd where bd.did = ${alias}.did
       and not (${ecsLive('bd', 'sc')} and ${ecsLive('bd', 'operator')})), ${alias}.search_vec)`
 }
