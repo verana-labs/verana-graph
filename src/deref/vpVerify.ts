@@ -1,7 +1,13 @@
+import { createPublicKey, verify } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { Ed25519Signature2020 } from '@digitalbazaar/ed25519-signature-2020'
 import { Ed25519VerificationKey2020 } from '@digitalbazaar/ed25519-verification-key-2020'
-import { resolveDID } from 'didwebvh-ts'
+import {
+  type DataIntegrityProofTemplate,
+  multibaseDecode,
+  prepareDataForSigning,
+  resolveDID,
+} from 'didwebvh-ts'
 import jsigs from 'jsonld-signatures'
 
 // TG-DEREF-3: a fetched VP body is holder-controlled and MUST have its signature re-verified
@@ -21,7 +27,10 @@ export interface DidDocumentLike {
   id: string
   verificationMethod?: VerificationMethodLike[]
   assertionMethod?: (string | VerificationMethodLike)[]
+  authentication?: (string | VerificationMethodLike)[]
 }
+
+type Relationship = 'assertionMethod' | 'authentication'
 
 export type DidDocResolver = (did: string) => Promise<DidDocumentLike | null>
 
@@ -37,22 +46,35 @@ function loadContext(name: string): unknown {
   return JSON.parse(readFileSync(new URL(`./contexts/${name}`, import.meta.url), 'utf8'))
 }
 
+const ed25519Verifier = {
+  async verify(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): Promise<boolean> {
+    const x = Buffer.from(publicKey).toString('base64url')
+    const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x }, format: 'jwk' })
+    return verify(null, message, key, signature)
+  },
+}
+
 export async function resolveWebvhDidDocument(did: string): Promise<DidDocumentLike | null> {
-  const { doc } = await resolveDID(did)
+  const { doc } = await resolveDID(did, { verifier: ed25519Verifier })
   return (doc as DidDocumentLike) ?? null
 }
 
-function methodFromDoc(doc: DidDocumentLike, methodId: string): VerificationMethodLike | null {
+function methodFromDoc(
+  doc: DidDocumentLike,
+  methodId: string,
+  relationship: Relationship,
+): VerificationMethodLike | null {
   const inVm = doc.verificationMethod?.find(m => m.id === methodId)
   if (inVm) return inVm
-  const inAssertion = doc.assertionMethod?.find(m => typeof m !== 'string' && m.id === methodId)
-  return typeof inAssertion === 'object' ? inAssertion : null
+  const embedded = doc[relationship]?.find(m => typeof m !== 'string' && m.id === methodId)
+  return typeof embedded === 'object' ? embedded : null
 }
 
-// the assertionMethod relationship may reference the method by id string or embed it
-function assertionAllows(doc: DidDocumentLike, methodId: string): boolean {
-  if (!doc.assertionMethod) return doc.verificationMethod?.some(m => m.id === methodId) ?? false
-  return doc.assertionMethod.some(m => (typeof m === 'string' ? m === methodId : m.id === methodId))
+// a relationship may reference the method by id string or embed it
+function relationshipAllows(doc: DidDocumentLike, relationship: Relationship, methodId: string): boolean {
+  const refs = doc[relationship]
+  if (!refs) return doc.verificationMethod?.some(m => m.id === methodId) ?? false
+  return refs.some(m => (typeof m === 'string' ? m === methodId : m.id === methodId))
 }
 
 export async function verifyVpSignature(
@@ -60,27 +82,49 @@ export async function verifyVpSignature(
   holderDid: string,
   resolveDoc: DidDocResolver,
 ): Promise<{ verified: boolean; reason?: string }> {
-  const proof = vp.proof as { verificationMethod?: string; type?: string } | undefined
+  const proof = vp.proof as
+    | { verificationMethod?: string; type?: string; cryptosuite?: string; proofPurpose?: string }
+    | undefined
   const methodId = proof?.verificationMethod
   if (!methodId) return { verified: false, reason: 'missing proof.verificationMethod' }
-  if (proof?.type !== 'Ed25519Signature2020') {
-    return { verified: false, reason: `unsupported proof type ${proof?.type}` }
+  const eddsaJcs = proof?.type === 'DataIntegrityProof' && proof.cryptosuite === 'eddsa-jcs-2022'
+  if (!eddsaJcs && proof?.type !== 'Ed25519Signature2020') {
+    const cryptosuite = proof?.cryptosuite ? ` ${proof.cryptosuite}` : ''
+    return { verified: false, reason: `unsupported proof type ${proof?.type}${cryptosuite}` }
   }
   if (methodId.split('#')[0] !== holderDid) {
     return { verified: false, reason: 'proof verificationMethod is not the holder DID' }
   }
-  if ((proof as { proofPurpose?: string }).proofPurpose !== 'assertionMethod') {
-    return { verified: false, reason: 'proof purpose is not assertionMethod' }
+  // jsigs' authentication purpose needs a challenge, which linked VPs never carry
+  const purpose = proof?.proofPurpose
+  if (purpose !== 'assertionMethod' && !(eddsaJcs && purpose === 'authentication')) {
+    return { verified: false, reason: `unsupported proof purpose ${purpose}` }
   }
 
   const doc = await resolveDoc(holderDid)
   if (!doc) return { verified: false, reason: 'holder DID document unresolvable' }
-  const method = methodFromDoc(doc, methodId)
+  const method = methodFromDoc(doc, methodId, purpose)
   if (!method?.publicKeyMultibase) {
     return { verified: false, reason: 'verification method not in holder DID document' }
   }
-  if (!assertionAllows(doc, methodId)) {
-    return { verified: false, reason: 'verification method not authorized for assertion' }
+  if (!relationshipAllows(doc, purpose, methodId)) {
+    return { verified: false, reason: `verification method not authorized for ${purpose}` }
+  }
+
+  const { proof: _omit, ...documentWithoutProof } = vp
+  if (eddsaJcs) {
+    const publicKey = multibaseDecode(method.publicKeyMultibase).bytes
+    if (publicKey[0] !== 0xed || publicKey[1] !== 0x01) {
+      return { verified: false, reason: 'verification method is not an Ed25519 key' }
+    }
+    const { proofValue, ...proofOptions } = proof as Json
+    const data = await prepareDataForSigning(
+      documentWithoutProof,
+      proofOptions as unknown as DataIntegrityProofTemplate,
+    )
+    const signature = multibaseDecode(proofValue as string).bytes
+    if (await ed25519Verifier.verify(signature, data, publicKey.slice(2))) return { verified: true }
+    return { verified: false, reason: 'signature verification failed' }
   }
 
   const key = await Ed25519VerificationKey2020.from({
@@ -117,7 +161,6 @@ export async function verifyVpSignature(
   // proof type under the VP's own contexts, which filters out proofs signed by stacks that do
   // not embed the suite context in the proof node (credo/vs-agent). Verified against real
   // agent-signed VPs; tampering still fails with an invalid signature.
-  const { proof: _omit, ...documentWithoutProof } = vp
   const proofNode = { ...(proof as Json), '@context': vp['@context'] }
   const suite = new Ed25519Signature2020({ key }) as unknown as {
     verifyProof(options: Json): Promise<{ verified: boolean; error?: Error }>
