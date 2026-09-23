@@ -116,6 +116,34 @@ describe('TG-DEREF-3 VP signature re-verification', () => {
     expect((await verifyVpSignature(tampered, DEVNET_HOLDER, async () => DEVNET_DOC)).verified).toBe(false)
   })
 
+  it('verifies eddsa-jcs-2022 under the proof @context, which must prefix the document @context', async () => {
+    const extended = {
+      ...DEVNET_VP,
+      '@context': [...(DEVNET_VP['@context'] as string[]), 'https://example.org/v1'],
+    }
+    expect(await verifyVpSignature(extended, DEVNET_HOLDER, async () => DEVNET_DOC)).toEqual({
+      verified: true,
+    })
+    const reordered = {
+      ...DEVNET_VP,
+      '@context': ['https://example.org/v1', ...(DEVNET_VP['@context'] as string[])],
+    }
+    const verdict = await verifyVpSignature(reordered, DEVNET_HOLDER, async () => DEVNET_DOC)
+    expect(verdict).toEqual({
+      verified: false,
+      reason: 'proof @context is not a prefix of the document @context',
+    })
+  })
+
+  it('returns a failed verdict for a missing or malformed eddsa-jcs-2022 proofValue', async () => {
+    const proof = DEVNET_VP.proof as Record<string, unknown>
+    for (const proofValue of [undefined, 42, 'z0OIl', 'uAAAA']) {
+      const vp = { ...DEVNET_VP, proof: { ...proof, proofValue } }
+      const verdict = await verifyVpSignature(vp, DEVNET_HOLDER, async () => DEVNET_DOC)
+      expect(verdict).toEqual({ verified: false, reason: 'malformed proof.proofValue' })
+    }
+  })
+
   it('rejects when the DID document is unresolvable', async () => {
     const { key } = await makeHolder(HOLDER)
     const vp = await signVp(key, HOLDER)

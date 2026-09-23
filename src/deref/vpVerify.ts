@@ -1,5 +1,6 @@
 import { createPublicKey, verify } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { isDeepStrictEqual } from 'node:util'
 import { Ed25519Signature2020 } from '@digitalbazaar/ed25519-signature-2020'
 import { Ed25519VerificationKey2020 } from '@digitalbazaar/ed25519-verification-key-2020'
 import {
@@ -77,6 +78,21 @@ function relationshipAllows(doc: DidDocumentLike, relationship: Relationship, me
   return refs.some(m => (typeof m === 'string' ? m === methodId : m.id === methodId))
 }
 
+function decodeProofValue(proofValue: unknown): Uint8Array | null {
+  if (typeof proofValue !== 'string' || !proofValue.startsWith('z')) return null
+  try {
+    return multibaseDecode(proofValue).bytes
+  } catch {
+    return null
+  }
+}
+
+function contextStartsWith(documentContext: unknown, proofContext: unknown): boolean {
+  const document = Array.isArray(documentContext) ? documentContext : [documentContext]
+  const prefix = Array.isArray(proofContext) ? proofContext : [proofContext]
+  return isDeepStrictEqual(document.slice(0, prefix.length), prefix)
+}
+
 export async function verifyVpSignature(
   vp: Json,
   holderDid: string,
@@ -118,11 +134,19 @@ export async function verifyVpSignature(
       return { verified: false, reason: 'verification method is not an Ed25519 key' }
     }
     const { proofValue, ...proofOptions } = proof as Json
+    const signature = decodeProofValue(proofValue)
+    if (!signature) return { verified: false, reason: 'malformed proof.proofValue' }
+    // https://www.w3.org/TR/vc-di-eddsa/#verify-proof-eddsa-jcs-2022 step 4
+    if (proofOptions['@context'] !== undefined) {
+      if (!contextStartsWith(vp['@context'], proofOptions['@context'])) {
+        return { verified: false, reason: 'proof @context is not a prefix of the document @context' }
+      }
+      documentWithoutProof['@context'] = proofOptions['@context']
+    }
     const data = await prepareDataForSigning(
       documentWithoutProof,
       proofOptions as unknown as DataIntegrityProofTemplate,
     )
-    const signature = multibaseDecode(proofValue as string).bytes
     if (await ed25519Verifier.verify(signature, data, publicKey.slice(2))) return { verified: true }
     return { verified: false, reason: 'signature verification failed' }
   }
