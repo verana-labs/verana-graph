@@ -6,7 +6,12 @@ import { Knex } from 'knex'
 import { ApiError } from '../errors'
 import { isTrustExpired } from '../refs'
 import { decodeCursor, encodeCursor, queryHash } from './cursor'
-import { applyParticipantExists, normalizeFilterValue, resolveFieldSpec } from './registry'
+import {
+  applyParticipantExists,
+  assertOperandTypes,
+  normalizeFilterValue,
+  resolveFieldSpec,
+} from './registry'
 
 type Surface = 'Did' | 'Ecosystem' | 'Corporation' | 'CredentialSchema' | 'ServiceEndpoint'
 
@@ -439,7 +444,10 @@ async function freeTextChunks(db: Knex, freeText: string): Promise<string[] | nu
 export function registerSearchRoute(app: FastifyInstance, db: Knex): void {
   const validate = compileRequestSchema()
 
-  app.post('/v4/graph/search', async (request, reply) => {
+  app.all('/v4/graph/search', async (request, reply) => {
+    if (request.method !== 'POST') {
+      throw new ApiError('INVALID_INPUT', `${request.method} is not supported, use POST`)
+    }
     const req = request.body as SearchRequest
     if (!validate(req)) {
       const detail = (validate.errors ?? []).map(e => `${e.instancePath || '/'} ${e.message}`).join('; ')
@@ -471,6 +479,7 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex): void {
             `operator ${norm.op} is not supported on ${field} (allowed: ${spec.ops.join(', ')})`,
           )
         }
+        assertOperandTypes(field, spec, norm)
         spec.apply(q, norm)
         if (spec.facet && (norm.op === 'eq' || norm.op === 'in')) facetSpecs.push([field, spec.facet])
       }

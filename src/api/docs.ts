@@ -61,7 +61,7 @@ export function registerDocs(app: FastifyInstance): void {
 
 **freeText**: ranked full-text match on the surface. The text splits on whitespace and punctuation and every token must match a whole word, case-insensitive, with no operators (TG-FCT-4a).
 
-**filters**: object keyed by field. A bare scalar means equals, an array means any-of, or pass an operator object (\`eq\`, \`in\`, \`prefix\`, \`range\`, \`contains\`, \`containsAny\`). Fields on the Did surface: \`Did.trusted\`, \`Did.pattern\`, \`Did.serviceTypes\`, \`Did.corporationId\`, \`Did.isCorporation\`, \`Did.isEcosystem\`, \`Did.ecosystemIds\`, \`Did.operatorKind\`, \`Did.operatorName\`, \`EcsCredential.ServiceCredential.type\`, \`EcsCredential.ServiceCredential.minimumAgeRequired\`, \`OrganizationCredential.countryCode\`, \`OrganizationCredential.legalJurisdiction\`, \`OrganizationCredential.organizationKind\`, \`OrganizationCredential.lei\`, \`OrganizationCredential.registryId\`, \`PersonaCredential.controllerCountryCode\`, \`PersonaCredential.controllerJurisdiction\`, \`Participant.ecosystemId\`, \`Participant.credentialSchemaId\`, \`Participant.role\`. \`Did.serviceTypes\` and \`Did.ecosystemIds\` take \`contains\` or \`containsAny\` only. An unknown field returns \`UNKNOWN_FILTER_FIELD\`.
+**filters**: object keyed by field. A bare scalar means equals, an array means any-of, or pass an operator object (\`eq\`, \`in\`, \`prefix\`, \`range\`, \`contains\`, \`containsAny\`). Fields on the Did surface: \`Did.trusted\`, \`Did.pattern\`, \`Did.serviceTypes\`, \`Did.corporationId\`, \`Did.isCorporation\`, \`Did.isEcosystem\`, \`Did.ecosystemIds\`, \`Did.operatorKind\`, \`Did.operatorName\`, \`EcsCredential.ServiceCredential.type\`, \`EcsCredential.ServiceCredential.minimumAgeRequired\`, \`OrganizationCredential.countryCode\`, \`OrganizationCredential.legalJurisdiction\`, \`OrganizationCredential.organizationKind\`, \`OrganizationCredential.lei\`, \`OrganizationCredential.registryId\`, \`PersonaCredential.controllerCountryCode\`, \`PersonaCredential.controllerJurisdiction\`, \`Participant.ecosystemId\`, \`Participant.credentialSchemaId\`, \`Participant.role\`. \`Did.serviceTypes\` and \`Did.ecosystemIds\` take \`contains\` or \`containsAny\` only. An unknown field returns \`UNKNOWN_FILTER_FIELD\`. A value of the wrong type for its field returns \`INVALID_INPUT\` (booleans are JSON \`true\` or \`false\`, ids and counts are non-negative integers, times are ISO 8601 date-times).
 
 **facets**: the response carries one aggregation per \`eq\` or \`in\` filter in the request plus a default set per surface (TG-FCT-6). Did: \`Did.operatorKind\`, \`EcsCredential.ServiceCredential.type\`, \`OrganizationCredential.countryCode\`. Ecosystem: \`archived\`, \`corporationId\`. CredentialSchema: \`archived\`, \`ecosystemId\`. ServiceEndpoint: \`type\`. Corporation has none.
 
@@ -142,7 +142,7 @@ export function registerDocs(app: FastifyInstance): void {
 
 Collection queries take \`limit\` (1..500, default 100) and \`cursor\`. Non-ACTIVE participants appear in traversal with their true state while referenced (TG-ACT-1), search never returns them.
 
-Errors (TG-ERR-1 envelope): \`INVALID_INPUT\`, \`UNKNOWN_QUERY\`, \`UNKNOWN_ID\`, \`UNKNOWN_FILTER_FIELD\`, \`INVALID_CURSOR\`.`,
+Errors (TG-ERR-1 envelope): \`INVALID_INPUT\`, \`UNKNOWN_QUERY\`, \`UNKNOWN_ID\`, \`UNKNOWN_FILTER_FIELD\`, \`INVALID_CURSOR\`, \`INTERNAL\` (500).`,
           requestBody: {
             required: true,
             content: {

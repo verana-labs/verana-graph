@@ -6,7 +6,7 @@ import { Knex } from 'knex'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { WebSocket } from 'ws'
 import { registerDocs } from '../../src/api/docs'
-import { ApiError } from '../../src/api/errors'
+import { apiErrorHandler } from '../../src/api/errors'
 import { registerSearchRoute } from '../../src/api/search/route'
 import { registerTraverseRoute } from '../../src/api/traverse/route'
 import { attachBlockProgressServer } from '../../src/bps/server'
@@ -28,6 +28,7 @@ const ajv = new Ajv({ strict: false })
 addFormats.default(ajv as never)
 const validateTraverse = ajv.compile(loadSchema('traverse.response.schema.json'))
 const validateSearch = ajv.compile(loadSchema('search.response.schema.json'))
+const validateError = ajv.compile(loadSchema('error.schema.json'))
 
 describe('read APIs against a bootstrapped graph', () => {
   let db: Knex
@@ -52,10 +53,7 @@ describe('read APIs against a bootstrapped graph', () => {
     })
 
     app = Fastify({ logger: false })
-    app.setErrorHandler((err: unknown, _req, reply) => {
-      if (err instanceof ApiError) return reply.status(err.httpStatus).send(err.toBody())
-      throw err
-    })
+    app.setErrorHandler(apiErrorHandler(() => {}))
     registerTraverseRoute(app, db)
     registerSearchRoute(app, db)
     registerDocs(app)
@@ -323,6 +321,56 @@ describe('read APIs against a bootstrapped graph', () => {
       })
       expect(status).toBe(400)
       expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
+    })
+
+    it('TG-ERR-1: a filter value of the wrong type returns INVALID_INPUT with 400, never a 500', async () => {
+      for (const [surface, filters] of [
+        ['Did', { 'Did.corporationId': 'abc' }],
+        ['Did', { 'Participant.ecosystemId': 'x' }],
+        ['Did', { 'Did.isCorporation': 1 }],
+        ['Did', { 'Did.isEcosystem': 'true' }],
+        ['Ecosystem', { archived: 'yes' }],
+        ['Ecosystem', { issuedCredentials: { range: { gte: 'abc' } } }],
+        ['Corporation', { deposit: { range: { gte: '40000000uvna' } } }],
+        ['Did', { 'EcsCredential.ServiceCredential.minimumAgeRequired': { range: { lte: 3000000000 } } }],
+        ['Corporation', { lastSlashedAtTime: { range: { gte: '2026-02-30T00:00:00Z' } } }],
+        ['Corporation', { lastSlashedAtTime: { range: { gte: '0000-01-01T00:00:00Z' } } }],
+        ['CredentialSchema', { archived: 1 }],
+      ] as const) {
+        const { status, body } = await search({ surface, filters })
+        expect(status, JSON.stringify(filters)).toBe(400)
+        expect(validateError(body)).toBe(true)
+        expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
+      }
+      const { status } = await search({ surface: 'Did', filters: { 'Did.corporationId': '42' } })
+      expect(status).toBe(200)
+    })
+
+    it('TG-ERR-1: unparseable bodies and non-POST methods return INVALID_INPUT with 400', async () => {
+      const json = { 'content-type': 'application/json' }
+      const responses = await Promise.all([
+        app.inject({
+          method: 'POST',
+          url: '/v4/graph/search',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: '{"surface":"Did"}',
+        }),
+        app.inject({ method: 'POST', url: '/v4/graph/traverse', headers: json, payload: '{"query":' }),
+        app.inject({
+          method: 'POST',
+          url: '/v4/graph/search',
+          headers: json,
+          payload: JSON.stringify({ surface: 'Did', freeText: 'x'.repeat(2_000_000) }),
+        }),
+        app.inject({ method: 'GET', url: '/v4/graph/search' }),
+        app.inject({ method: 'DELETE', url: '/v4/graph/traverse' }),
+      ])
+      for (const res of responses) {
+        const body = res.json()
+        expect(res.statusCode).toBe(400)
+        expect(validateError(body)).toBe(true)
+        expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
+      }
     })
   })
 

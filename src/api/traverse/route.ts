@@ -45,7 +45,10 @@ export function registerTraverseRoute(app: FastifyInstance, db: Knex): void {
   const validate = compileRequestSchema()
 
   // TG-QRY-5: the single REST binding endpoint, dispatching on the query selector
-  app.post('/v4/graph/traverse', async (request, reply) => {
+  app.all('/v4/graph/traverse', async (request, reply) => {
+    if (request.method !== 'POST') {
+      throw new ApiError('INVALID_INPUT', `${request.method} is not supported, use POST`)
+    }
     const body = request.body as { query?: string; input?: unknown; limit?: unknown; cursor?: string }
     if (typeof body?.query === 'string' && !HANDLERS[body.query]) {
       throw new ApiError('UNKNOWN_QUERY', `unknown query ${body.query}`)

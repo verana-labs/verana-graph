@@ -1,3 +1,5 @@
+import { Ajv2020 as Ajv } from 'ajv/dist/2020.js'
+import addFormats from 'ajv-formats'
 import { Knex } from 'knex'
 import { ApiError } from '../errors'
 
@@ -32,11 +34,49 @@ export function normalizeFilterValue(field: string, raw: unknown): NormalizedFil
   return { op: 'eq', value: raw }
 }
 
+export type OperandType = 'string' | 'boolean' | 'int' | 'bigint' | 'dateTime'
+
 export interface FieldSpec {
   ops: Operator[]
+  type: OperandType
   apply: (q: Knex.QueryBuilder, f: NormalizedFilter) => void
   // facet aggregation for eq/in fields (TG-FCT-6)
   facet: ((base: Knex.QueryBuilder, db: Knex) => Knex.QueryBuilder) | null
+}
+
+const ajv = new Ajv({ strict: false })
+addFormats.default(ajv as never)
+const isDateTime = ajv.compile({ type: 'string', format: 'date-time' })
+
+function isInteger(v: unknown, max: number): boolean {
+  const n = typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : v
+  return typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 && n <= max
+}
+
+const OPERANDS: Record<OperandType, { label: string; accepts: (v: unknown) => boolean }> = {
+  string: { label: 'a string', accepts: v => typeof v === 'string' },
+  boolean: { label: 'true or false', accepts: v => typeof v === 'boolean' },
+  int: { label: 'an integer from 0 to 2147483647', accepts: v => isInteger(v, 2147483647) },
+  bigint: { label: 'a non-negative integer', accepts: v => isInteger(v, Number.MAX_SAFE_INTEGER) },
+  // Postgres has no year 0
+  dateTime: {
+    label: 'an ISO 8601 date-time',
+    accepts: v => isDateTime(v) && !(v as string).startsWith('0000'),
+  },
+}
+
+export function assertOperandTypes(field: string, spec: FieldSpec, f: NormalizedFilter): void {
+  const values =
+    f.op === 'range' ? Object.values(f.value as RangeValue) : Array.isArray(f.value) ? f.value : [f.value]
+  const operand = OPERANDS[spec.type]
+  for (const v of values) {
+    if (!operand.accepts(v)) {
+      throw new ApiError(
+        'INVALID_INPUT',
+        `filter ${field} expects ${operand.label}, got ${JSON.stringify(v)}`,
+      )
+    }
+  }
 }
 
 function scalarColumn(col: string): Pick<FieldSpec, 'apply'> {
@@ -85,19 +125,21 @@ function columnFacet(col: string, alias = col) {
       .limit(20)
 }
 
-function spec(col: string, ops: Operator[], facetCol?: string | null): FieldSpec {
+function spec(col: string, type: OperandType, ops: Operator[], facetCol?: string | null): FieldSpec {
   return {
     ops,
+    type,
     ...scalarColumn(col),
     facet: facetCol === null ? null : columnFacet(facetCol ?? col),
   }
 }
 
 export const DID_FILTERS: Record<string, FieldSpec> = {
-  'Did.trusted': spec('d.trusted', ['eq'], 'd.trusted'),
-  'Did.pattern': spec('d.pattern', ['eq', 'in'], 'd.pattern'),
+  'Did.trusted': spec('d.trusted', 'boolean', ['eq'], 'd.trusted'),
+  'Did.pattern': spec('d.pattern', 'string', ['eq', 'in'], 'd.pattern'),
   'Did.serviceTypes': {
     ops: ['contains', 'containsAny'],
+    type: 'string',
     apply(q, f) {
       if (f.op === 'contains') q.whereRaw('d.service_types @> ARRAY[?]::text[]', [String(f.value)])
       else q.whereRaw('d.service_types && ?::text[]', [f.value as string[]])
@@ -111,25 +153,26 @@ export const DID_FILTERS: Record<string, FieldSpec> = {
         .orderBy('count', 'desc')
         .limit(20),
   },
-  'Did.corporationId': spec('d.corporation_id', ['eq'], 'd.corporation_id'),
+  'Did.corporationId': spec('d.corporation_id', 'bigint', ['eq'], 'd.corporation_id'),
   'Did.isCorporation': {
     ops: ['eq'],
+    type: 'boolean',
     apply(q, f) {
-      const want = f.value === true || f.value === 'true'
-      q.whereRaw(`exists(select 1 from corporations cf where cf.did = d.did) = ?`, [want])
+      q.whereRaw(`exists(select 1 from corporations cf where cf.did = d.did) = ?`, [f.value as boolean])
     },
     facet: expressionFacet('exists(select 1 from corporations cf where cf.did = d.did)'),
   },
   'Did.isEcosystem': {
     ops: ['eq'],
+    type: 'boolean',
     apply(q, f) {
-      const want = f.value === true || f.value === 'true'
-      q.whereRaw(`exists(select 1 from ecosystems ef where ef.did = d.did) = ?`, [want])
+      q.whereRaw(`exists(select 1 from ecosystems ef where ef.did = d.did) = ?`, [f.value as boolean])
     },
     facet: expressionFacet('exists(select 1 from ecosystems ef where ef.did = d.did)'),
   },
   'Did.ecosystemIds': {
     ops: ['contains', 'containsAny'],
+    type: 'bigint',
     apply(q, f) {
       const ids = (f.op === 'contains' ? [f.value] : (f.value as unknown[])).map(Number)
       const sql = f.op === 'contains' ? 'array_agg(ef.id) @> ?::bigint[]' : 'array_agg(ef.id) && ?::bigint[]'
@@ -137,11 +180,12 @@ export const DID_FILTERS: Record<string, FieldSpec> = {
     },
     facet: null,
   },
-  'Did.operatorKind': spec('d.operator_kind', ['eq', 'in'], 'd.operator_kind'),
+  'Did.operatorKind': spec('d.operator_kind', 'string', ['eq', 'in'], 'd.operator_kind'),
   // TG-FCT-3: one derived field matching the operatorName of the snippet, so a client
   // filtering by operator name never has to branch on operatorKind
   'Did.operatorName': {
     ops: ['eq', 'in', 'prefix'],
+    type: 'string',
     apply(q, f) {
       if (f.op === 'eq') q.whereRaw('coalesce(d.org_name, d.persona_name) = ?', [f.value as string])
       else if (f.op === 'in')
@@ -150,35 +194,44 @@ export const DID_FILTERS: Record<string, FieldSpec> = {
     },
     facet: expressionFacet('coalesce(d.org_name, d.persona_name)'),
   },
-  'EcsCredential.ServiceCredential.type': spec('d.sc_type', ['eq', 'in'], 'd.sc_type'),
-  'EcsCredential.ServiceCredential.minimumAgeRequired': spec('d.min_age', ['range'], null),
-  'OrganizationCredential.countryCode': spec('d.org_country_code', ['eq', 'in'], 'd.org_country_code'),
+  'EcsCredential.ServiceCredential.type': spec('d.sc_type', 'string', ['eq', 'in'], 'd.sc_type'),
+  'EcsCredential.ServiceCredential.minimumAgeRequired': spec('d.min_age', 'int', ['range'], null),
+  'OrganizationCredential.countryCode': spec(
+    'd.org_country_code',
+    'string',
+    ['eq', 'in'],
+    'd.org_country_code',
+  ),
   'OrganizationCredential.legalJurisdiction': spec(
     'd.org_legal_jurisdiction',
+    'string',
     ['eq', 'in', 'prefix'],
     'd.org_legal_jurisdiction',
   ),
   'OrganizationCredential.organizationKind': spec(
     'd.org_organization_kind',
+    'string',
     ['eq', 'in'],
     'd.org_organization_kind',
   ),
-  'OrganizationCredential.lei': spec('d.org_lei', ['eq'], 'd.org_lei'),
-  'OrganizationCredential.registryId': spec('d.org_registry_id', ['eq'], 'd.org_registry_id'),
+  'OrganizationCredential.lei': spec('d.org_lei', 'string', ['eq'], 'd.org_lei'),
+  'OrganizationCredential.registryId': spec('d.org_registry_id', 'string', ['eq'], 'd.org_registry_id'),
   'PersonaCredential.controllerCountryCode': spec(
     'd.persona_country_code',
+    'string',
     ['eq', 'in'],
     'd.persona_country_code',
   ),
   'PersonaCredential.controllerJurisdiction': spec(
     'd.persona_jurisdiction',
+    'string',
     ['eq', 'in', 'prefix'],
     'd.persona_jurisdiction',
   ),
   // Participant.* filters correlate on the SAME participant row (gap filed against TG-FCT-3)
-  'Participant.ecosystemId': participantFilter('ecosystem_id'),
-  'Participant.credentialSchemaId': participantFilter('credential_schema_id'),
-  'Participant.role': participantFilter('role'),
+  'Participant.ecosystemId': participantFilter('ecosystem_id', 'bigint'),
+  'Participant.credentialSchemaId': participantFilter('credential_schema_id', 'bigint'),
+  'Participant.role': participantFilter('role', 'string'),
 }
 
 interface ParticipantConstraints {
@@ -190,9 +243,10 @@ interface ParticipantConstraints {
 // collected per request, applied as one EXISTS
 export const participantConstraintsKey = Symbol('participantConstraints')
 
-function participantFilter(col: keyof ParticipantConstraints): FieldSpec {
+function participantFilter(col: keyof ParticipantConstraints, type: OperandType): FieldSpec {
   return {
     ops: ['eq', 'in'],
+    type,
     apply(q, f) {
       const store = (q as unknown as Record<symbol, ParticipantConstraints>)[participantConstraintsKey] ?? {}
       store[col] = f
@@ -225,27 +279,27 @@ export function applyParticipantExists(q: Knex.QueryBuilder, db: Knex): void {
 }
 
 export const ECOSYSTEM_FILTERS: Record<string, FieldSpec> = {
-  archived: spec('e.archived', ['eq'], 'e.archived'),
-  issuedCredentials: spec('e.issued_credentials', ['range'], null),
-  verifiedCredentials: spec('e.verified_credentials', ['range'], null),
-  corporationId: spec('e.corporation_id', ['eq'], 'e.corporation_id'),
+  archived: spec('e.archived', 'boolean', ['eq'], 'e.archived'),
+  issuedCredentials: spec('e.issued_credentials', 'bigint', ['range'], null),
+  verifiedCredentials: spec('e.verified_credentials', 'bigint', ['range'], null),
+  corporationId: spec('e.corporation_id', 'bigint', ['eq'], 'e.corporation_id'),
 }
 
 export const CORPORATION_FILTERS: Record<string, FieldSpec> = {
-  deposit: spec('c.deposit_amount', ['range'], null),
-  slashedEvents: spec('c.slashed_events', ['range'], null),
-  lastSlashedAtTime: spec('c.last_slashed_at_time', ['range'], null),
+  deposit: spec('c.deposit_amount', 'bigint', ['range'], null),
+  slashedEvents: spec('c.slashed_events', 'int', ['range'], null),
+  lastSlashedAtTime: spec('c.last_slashed_at_time', 'dateTime', ['range'], null),
 }
 
 export const SCHEMA_FILTERS: Record<string, FieldSpec> = {
-  archived: spec('cs.archived', ['eq'], 'cs.archived'),
-  ecosystemId: spec('cs.ecosystem_id', ['eq', 'in'], 'cs.ecosystem_id'),
-  issuedCredentials: spec('cs.issued_credentials', ['range'], null),
-  verifiedCredentials: spec('cs.verified_credentials', ['range'], null),
+  archived: spec('cs.archived', 'boolean', ['eq'], 'cs.archived'),
+  ecosystemId: spec('cs.ecosystem_id', 'bigint', ['eq', 'in'], 'cs.ecosystem_id'),
+  issuedCredentials: spec('cs.issued_credentials', 'bigint', ['range'], null),
+  verifiedCredentials: spec('cs.verified_credentials', 'bigint', ['range'], null),
 }
 
 export const SERVICE_ENDPOINT_FILTERS: Record<string, FieldSpec> = {
-  type: spec('se.type', ['eq', 'in'], 'se.type'),
+  type: spec('se.type', 'string', ['eq', 'in'], 'se.type'),
 }
 
 const PARTICIPANTS_ROLE_RE =
@@ -269,6 +323,7 @@ export function resolveFieldSpec(surface: string, field: string): FieldSpec {
       const role = m[1] as string
       return {
         ops: ['range'],
+        type: 'bigint',
         apply(q, f) {
           if (f.op === 'range') {
             const r = f.value as RangeValue
