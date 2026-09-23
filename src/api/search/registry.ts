@@ -158,6 +158,7 @@ function gated(live: string, s: FieldSpec): FieldSpec {
   const facet = s.facet
   return {
     ops: s.ops,
+    type: s.type,
     apply(q, f) {
       s.apply(q, f)
       q.whereRaw(live)
