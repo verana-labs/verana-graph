@@ -364,7 +364,7 @@ export function resolveFieldSpec(surface: string, field: string): FieldSpec {
         apply(q, f) {
           if (f.op === 'range') {
             const r = f.value as RangeValue
-            const expr = `(e.participants->>'${role}')::bigint`
+            const expr = `coalesce((e.participants->>'${role}')::bigint, 0)`
             if (r.gt !== undefined) q.whereRaw(`${expr} > ?`, [r.gt])
             if (r.gte !== undefined) q.whereRaw(`${expr} >= ?`, [r.gte])
             if (r.lt !== undefined) q.whereRaw(`${expr} < ?`, [r.lt])

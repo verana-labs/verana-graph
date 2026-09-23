@@ -566,6 +566,14 @@ describe('read APIs against a bootstrapped graph', () => {
       expect(validateSearch(body)).toBe(true)
     })
 
+    it('a role missing from the participants map counts as zero', async () => {
+      const { body } = await search({
+        surface: 'Ecosystem',
+        filters: { 'participants[VERIFIER]': { range: { lte: 0 } } },
+      })
+      expect((body as { hits: { id: number }[] }).hits.map(h => h.id)).toEqual([7])
+    })
+
     it('TG-FCT-6: the Did surface carries its default facets and never the near-unique ones', async () => {
       const { body } = await search({ surface: 'Did' })
       expect(validateSearch(body)).toBe(true)
