@@ -457,6 +457,11 @@ describe('ingestion lifecycle', () => {
       { id: `${DIDS.vs}#files`, did_id: DIDS.vs },
     ])
     expect((await db('linked_vps').where('did_id', DIDS.vs).first()).service_id).toBe(`${DIDS.vs}#vp1`)
+    expect((await db('dids').where('did', DIDS.vs).first()).service_types).toEqual([
+      'did-communication',
+      'MCP',
+      'relativeRef',
+    ])
   })
 
   it('TG-INGEST-5: a live gap is recovered via listChanges with identical terminal state', async () => {

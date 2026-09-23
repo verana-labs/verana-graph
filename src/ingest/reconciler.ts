@@ -379,7 +379,7 @@ async function upsertDid(trx: Knex, r: ResolveResponse, e: Evidence): Promise<vo
     expires_at_time: r.expiresAtTime,
     corporation_id: r.corporationId,
     pattern: p.pattern,
-    service_types: (r.services ?? []).map(s => s.type),
+    service_types: [...new Set((r.services ?? []).map(s => s.type))],
     operator_kind: identity.operatorKind,
     sc_name: facets.scName,
     sc_type: facets.scType,

@@ -8,6 +8,12 @@ export async function up(knex: Knex): Promise<void> {
   `)
   await knex.raw(`update service_endpoints set id = did_id || id where id like '#%'`)
   await knex.raw(`update linked_vps set service_id = did_id || service_id where service_id like '#%'`)
+  await knex.raw(`
+    update dids set service_types = array(
+      select t from unnest(service_types) with ordinality u(t, n) group by t order by min(n)
+    )
+    where cardinality(service_types) > (select count(distinct t) from unnest(service_types) t)
+  `)
 }
 
 export async function down(): Promise<void> {
