@@ -6,7 +6,7 @@ import { IndexerRestClient } from '../../src/indexer/rest'
 import { IngestOrchestrator } from '../../src/ingest/orchestrator'
 import { repairDerivedFacets } from '../../src/ingest/reconciler'
 import { createLogger } from '../../src/util/logger'
-import { buildWorld, DIDS, ecoSnapshot, issuerSnapshot, vsSnapshot } from '../harness/fixture'
+import { buildWorld, DIDS, ecoSnapshot, issuerSnapshot, plainSnapshot, vsSnapshot } from '../harness/fixture'
 import { block, MockIndexer } from '../harness/mock-indexer'
 import { freshDb, testConfig, waitFor } from '../harness/setup'
 
@@ -138,6 +138,21 @@ describe('ingestion lifecycle', () => {
       const row = await db('dids').where('did', DIDS.vs).first()
       return Boolean(row.schema_text?.includes('Organization Credential Schema'))
     })
+  })
+
+  it('TG-INGEST-3: a DID that fails to resolve is skipped and picked up by its next change', async () => {
+    mock.resolveDelayByDid.set(DIDS.plain, 300)
+    await orchestrator.start()
+    await waitFor(async () => mock.resolveCalls.some(c => c.did === DIDS.plain))
+    mock.world.snapshots.get(DIDS.plain)?.delete(0)
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 99)
+    expect(mock.resolveCalls).toHaveLength(6)
+    expect(await db('dids').where('did', DIDS.plain).first()).toBeUndefined()
+
+    mock.world.snapshots.get(DIDS.plain)?.set(100, plainSnapshot())
+    mock.pushBlock(block(100, [{ did: DIDS.plain, services: true }]))
+    await waitFor(async () => Boolean(await db('dids').where('did', DIDS.plain).first()))
   })
 
   it('TG-FCT-4: the bound DID identity text lands on the Ecosystem and Corporation documents', async () => {
