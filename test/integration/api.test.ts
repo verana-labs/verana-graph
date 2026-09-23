@@ -409,6 +409,22 @@ describe('read APIs against a bootstrapped graph', () => {
       ])
     })
 
+    it('F1 walks every holder of a shared EcsCredential id', async () => {
+      const org = await db('ecs_credentials').where('id', 'urn:cred:org:issuer').first()
+      await db('ecs_credentials').insert({ ...org, subject_did: DIDS.vs })
+      const { body } = await traverse('F1', {
+        from: { type: 'EcsCredential', id: 'urn:cred:org:issuer' },
+        to: { type: 'Did', id: DIDS.vs },
+      })
+      await db('ecs_credentials').where({ id: 'urn:cred:org:issuer', subject_did: DIDS.vs }).delete()
+
+      expectValidTraverse(body)
+      expect((body as { output: unknown }).output).toEqual([
+        { node: { type: 'EcsCredential', id: 'urn:cred:org:issuer' }, edge: 'SUBJECT_OF_CREDENTIAL' },
+        { node: { type: 'Did', id: DIDS.vs } },
+      ])
+    })
+
     it('F1 walks OWNS_SCHEMA to a schema that is not materialised', async () => {
       const eco = db('ecosystems').where('id', 7)
       await eco.clone().update({ credential_schema_ids: [100, 101, 998] })

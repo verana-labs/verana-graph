@@ -558,8 +558,7 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
     case 'EcsCredential':
     case 'Vtc': {
       const table = n.type === 'Vtc' ? 'vtcs' : 'ecs_credentials'
-      const c = await db(table).where('id', n.id).first()
-      if (c) {
+      for (const c of await db(table).where('id', n.id)) {
         if (n.type === 'EcsCredential') push('Did', c.subject_did, 'SUBJECT_OF_CREDENTIAL')
         push('Participant', c.issuer_participant_id, 'ISSUED_BY')
         push('Participant', c.participant_id, 'HELD_AS')
