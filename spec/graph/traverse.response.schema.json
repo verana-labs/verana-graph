@@ -253,7 +253,8 @@
         "serviceEndpoint": {
           "anyOf": [
             { "type": "string", "format": "uri" },
-            { "type": "object" }
+            { "type": "object" },
+            { "type": "array", "minItems": 1, "items": { "anyOf": [{ "type": "string", "format": "uri" }, { "type": "object" }] } }
           ]
         },
         "accept": { "type": "array", "items": { "type": "string" } },
