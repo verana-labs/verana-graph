@@ -455,7 +455,10 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex): void {
       }
       if (req.surface === 'Did') applyParticipantExists(q, db)
       if (freeText) {
-        q.whereRaw(`${def.alias}.search_vec @@ plainto_tsquery('simple', search_tokens(?))`, [freeText])
+        q.whereRaw(
+          `(numnode(plainto_tsquery('simple', search_tokens(?))) = 0 OR ${def.alias}.search_vec @@ plainto_tsquery('simple', search_tokens(?)))`,
+          [freeText, freeText],
+        )
       }
       return { q, facetSpecs }
     }

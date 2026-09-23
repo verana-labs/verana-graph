@@ -29,7 +29,7 @@ const SERVICE_ENDPOINT: Field[] = [
   [
     `id || ' ' || type || ' ' ||
       jsonb_path_query_array(service_endpoint, 'strict $.** \\? (@.type() == "string")')::text`,
-    'D',
+    'B',
   ],
 ]
 
