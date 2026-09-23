@@ -6,7 +6,7 @@ import { IndexerRestClient } from '../../src/indexer/rest'
 import { IngestOrchestrator } from '../../src/ingest/orchestrator'
 import { repairDerivedFacets } from '../../src/ingest/reconciler'
 import { createLogger } from '../../src/util/logger'
-import { buildWorld, DIDS, ecoSnapshot, issuerSnapshot, vsSnapshot } from '../harness/fixture'
+import { buildWorld, DIDS, ecoSnapshot, issuerSnapshot, plainSnapshot, vsSnapshot } from '../harness/fixture'
 import { block, MockIndexer } from '../harness/mock-indexer'
 import { freshDb, testConfig, waitFor } from '../harness/setup'
 
@@ -140,6 +140,21 @@ describe('ingestion lifecycle', () => {
     })
   })
 
+  it('TG-INGEST-3: a DID that fails to resolve is skipped and picked up by its next change', async () => {
+    mock.resolveDelayByDid.set(DIDS.plain, 300)
+    await orchestrator.start()
+    await waitFor(async () => mock.resolveCalls.some(c => c.did === DIDS.plain))
+    mock.world.snapshots.get(DIDS.plain)?.delete(0)
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 99)
+    expect(mock.resolveCalls).toHaveLength(6)
+    expect(await db('dids').where('did', DIDS.plain).first()).toBeUndefined()
+
+    mock.world.snapshots.get(DIDS.plain)?.set(100, plainSnapshot())
+    mock.pushBlock(block(100, [{ did: DIDS.plain, services: true }]))
+    await waitFor(async () => Boolean(await db('dids').where('did', DIDS.plain).first()))
+  })
+
   it('TG-FCT-4: the bound DID identity text lands on the Ecosystem and Corporation documents', async () => {
     await bootstrapped()
     await db('ecosystems').update({ did_text: null })
@@ -198,6 +213,22 @@ describe('ingestion lifecycle', () => {
     await waitFor(async () => (await db('dids').where('did', DIDS.vs).first()).trusted === false)
     expect(mock.resolveCalls.length).toBe(before)
     expect((await db('ingestion_state').first()).last_applied_block).toBe(100)
+  })
+
+  it('TG-INGEST-4: a DID that fails to resolve is skipped and the block still commits', async () => {
+    await bootstrapped()
+    mock.world.snapshots.get(DIDS.plain)?.delete(0)
+    mock.world.snapshots.get(DIDS.issuer)?.set(100, issuerSnapshot(false))
+    mock.pushBlock(
+      block(100, [
+        { did: DIDS.plain, services: true },
+        { did: DIDS.issuer, participations: true },
+      ]),
+    )
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 100)
+    expect(await db('participants').where('id', 11).first()).toBeUndefined()
+    expect(await db('dids').where('did', DIDS.plain).first()).toBeTruthy()
   })
 
   it('TG-ACT-1: a participant absent from the response is hard-deleted on reconcile', async () => {
