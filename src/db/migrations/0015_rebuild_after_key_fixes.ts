@@ -1,6 +1,6 @@
 import type { Knex } from 'knex'
 
-// every table is derived from the indexer: an empty ingestion_state re-bootstraps on the next start
+// every table is rebuilt by ingestion (GF and VP bodies are refetched): an empty ingestion_state re-bootstraps
 const TABLES = [
   'ingestion_state',
   'dids',
