@@ -29,7 +29,13 @@ export function encodeCursor(score: number, key: string, hash: string): string {
   return Buffer.from(JSON.stringify({ s: score, k: key, h: hash })).toString('base64url')
 }
 
-export function decodeCursor(cursor: string, expectedHash: string): CursorPayload {
+export type KeyType = 'int' | 'text'
+
+export function isValidKey(key: string, type: KeyType): boolean {
+  return type === 'int' ? /^\d+$/.test(key) && Number.isSafeInteger(Number(key)) : !key.includes('\0')
+}
+
+export function decodeCursor(cursor: string, expectedHash: string, keyType: KeyType): CursorPayload {
   let parsed: unknown
   try {
     parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
@@ -42,6 +48,9 @@ export function decodeCursor(cursor: string, expectedHash: string): CursorPayloa
   const payload = parsed as CursorPayload
   if (typeof payload.s !== 'number' || typeof payload.k !== 'string' || payload.h !== expectedHash) {
     throw new ApiError('INVALID_CURSOR', 'cursor does not belong to this query')
+  }
+  if (!isValidKey(payload.k, keyType)) {
+    throw new ApiError('INVALID_CURSOR', 'cursor key is not valid for this query')
   }
   return payload
 }

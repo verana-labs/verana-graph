@@ -7,7 +7,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { WebSocket } from 'ws'
 import { registerDocs } from '../../src/api/docs'
 import { apiErrorHandler } from '../../src/api/errors'
+import { queryHash } from '../../src/api/search/cursor'
 import { registerSearchRoute } from '../../src/api/search/route'
+import { pageHash } from '../../src/api/traverse/cursor'
 import { registerTraverseRoute } from '../../src/api/traverse/route'
 import { attachBlockProgressServer } from '../../src/bps/server'
 import { Dereferencer } from '../../src/deref/deref'
@@ -321,9 +323,31 @@ describe('read APIs against a bootstrapped graph', () => {
     })
 
     it('TG-ERR-1: an unknown query selector returns UNKNOWN_QUERY with 400', async () => {
-      const { status, body } = await traverse('ZZ', { did: DIDS.vs })
-      expect(status).toBe(400)
-      expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_QUERY')
+      for (const query of ['ZZ', 'toString', '__proto__']) {
+        const { status, body } = await traverse(query, { did: DIDS.vs })
+        expect(status, query).toBe(400)
+        expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_QUERY')
+      }
+    })
+
+    it('TG-ERR-1: a cursor with a forged key returns INVALID_CURSOR with 400', async () => {
+      const forge = (payload: object) => Buffer.from(JSON.stringify(payload)).toString('base64url')
+      const did = { did: DIDS.vs }
+      for (const { status, body } of [
+        await search({
+          surface: 'Ecosystem',
+          cursor: forge({ s: 0, k: 'abc', h: queryHash({ surface: 'Ecosystem' }) }),
+        }),
+        await search({
+          surface: 'Did',
+          cursor: forge({ s: 0, k: '\u0000', h: queryHash({ surface: 'Did' }) }),
+        }),
+        await traverse('A7', did, { cursor: forge({ k: '1e400', h: pageHash('A7', did) }) }),
+        await traverse('A4', did, { cursor: forge({ k: '\u0000', h: pageHash('A4', did) }) }),
+      ]) {
+        expect(status).toBe(400)
+        expect((body as { error: { code: string } }).error.code).toBe('INVALID_CURSOR')
+      }
     })
 
     it('TG-ERR-1: an unknown filter field returns UNKNOWN_FILTER_FIELD with 400', async () => {

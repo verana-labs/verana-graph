@@ -511,7 +511,8 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex): void {
     def.coreSelect?.(hitsQuery)
     for (const [, g] of groups) g.select?.(hitsQuery)
     if (req.cursor !== undefined && req.cursor !== null) {
-      const c = decodeCursor(req.cursor, hash)
+      const keyType = req.surface === 'Did' || req.surface === 'ServiceEndpoint' ? 'text' : 'int'
+      const c = decodeCursor(req.cursor, hash, keyType)
       hitsQuery.whereRaw(`(${scoreSelect} < ? OR (${scoreSelect} = ? AND ${def.pk} > ?))`, [
         ...scoreBindings,
         c.s,
