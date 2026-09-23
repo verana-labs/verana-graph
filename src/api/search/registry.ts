@@ -145,9 +145,13 @@ function spec(col: string, type: OperandType, ops: Operator[], facetCol?: string
   }
 }
 
-// TG-ACT-1: ECS-derived columns read as null once their credential's validUntil has passed
+// TG-ACT-1: ECS-derived columns read as null once their credential's validUntil has passed.
+// A Pattern B operator is reached through the ServiceCredential, so it also needs that one live.
 export function ecsLive(alias: string, part: 'sc' | 'operator'): string {
-  return `(${alias}.${part}_valid_until is null or ${alias}.${part}_valid_until >= now())`
+  const own = `(${alias}.${part}_valid_until is null or ${alias}.${part}_valid_until >= now())`
+  return part === 'sc'
+    ? own
+    : `(${own} and (${alias}.pattern is distinct from 'B' or ${ecsLive(alias, 'sc')}))`
 }
 
 function gated(live: string, s: FieldSpec): FieldSpec {
@@ -167,7 +171,7 @@ const OPERATOR_LIVE = ecsLive('d', 'operator')
 
 export const DID_FILTERS: Record<string, FieldSpec> = {
   'Did.trusted': spec('d.trusted', 'boolean', ['eq'], 'd.trusted'),
-  'Did.pattern': spec('d.pattern', 'string', ['eq', 'in'], 'd.pattern'),
+  'Did.pattern': gated(SC_LIVE, spec('d.pattern', 'string', ['eq', 'in'], 'd.pattern')),
   'Did.serviceTypes': {
     ops: ['contains', 'containsAny'],
     type: 'string',

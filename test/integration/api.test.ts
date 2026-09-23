@@ -614,8 +614,8 @@ describe('read APIs against a bootstrapped graph', () => {
 
     it('TG-ACT-1: ECS data past its validUntil leaves groups, filters, facets and free text', async () => {
       const past = '2000-01-01T00:00:00Z'
-      await db('dids').whereIn('did', [DIDS.vs, DIDS.eco]).update({ sc_valid_until: past })
-      await db('dids').where('did', DIDS.issuer).update({ operator_valid_until: past })
+      await db('dids').where('did', DIDS.vs).update({ sc_valid_until: past })
+      await db('dids').whereIn('did', [DIDS.eco, DIDS.issuer]).update({ operator_valid_until: past })
       try {
         const all = await search({ surface: 'Did' })
         expect(validateSearch(all.body)).toBe(true)
@@ -625,24 +625,27 @@ describe('read APIs against a bootstrapped graph', () => {
         }
         const vs = b.hits.find(h => h.id === DIDS.vs)?.snippet
         expect(vs?.service).toBeNull()
-        expect((vs?.operator as { name: string }).name).toBe('Acme GmbH')
+        expect(vs?.operator).toBeNull()
         expect(b.hits.find(h => h.id === DIDS.issuer)?.snippet.operator).toBeNull()
         expect(b.facets['EcsCredential.ServiceCredential.type']).toEqual([])
-        expect(b.facets['OrganizationCredential.countryCode']).toEqual([{ value: 'DE', count: 1 }])
+        expect(b.facets['OrganizationCredential.countryCode']).toEqual([])
 
         const ids = async (payload: Record<string, unknown>): Promise<unknown[]> =>
           ((await search(payload)).body as { hits: { id: unknown }[] }).hits.map(h => h.id)
         expect(
           await ids({ surface: 'Did', filters: { 'OrganizationCredential.countryCode': 'DE' } }),
-        ).toEqual([DIDS.vs])
+        ).toEqual([])
+        expect(await ids({ surface: 'Did', filters: { 'Did.pattern': 'B' } })).toEqual([])
         expect(await ids({ surface: 'Did', freeText: 'baby' })).toEqual([])
-        expect(await ids({ surface: 'Did', freeText: 'acme' })).toEqual([DIDS.vs])
-        expect(await ids({ surface: 'Ecosystem', freeText: 'banking' })).toEqual([])
-        expect(await ids({ surface: 'Ecosystem', freeText: 'acme' })).toEqual([7])
+        expect(await ids({ surface: 'Did', freeText: 'acme' })).toEqual([])
+        expect(await ids({ surface: 'Did', freeText: 'plumber' })).toEqual([DIDS.issuer, DIDS.vs])
+        expect(await ids({ surface: 'Ecosystem', freeText: 'banking' })).toEqual([7])
+        expect(await ids({ surface: 'Ecosystem', freeText: 'acme' })).toEqual([])
 
         const eco = await search({ surface: 'Ecosystem' })
         const card = (eco.body as { hits: { snippet: { didCard: Record<string, unknown> } }[] }).hits[0]
-        expect(card?.snippet.didCard.service).toBeNull()
+        expect((card?.snippet.didCard.service as { name: string }).name).toBe('EU Banking Registry')
+        expect(card?.snippet.didCard.operator).toBeNull()
       } finally {
         await db('dids')
           .whereIn('did', [DIDS.vs, DIDS.eco, DIDS.issuer])

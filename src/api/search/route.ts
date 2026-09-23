@@ -68,6 +68,7 @@ function service(r: Record<string, unknown>): Record<string, unknown> | null {
 
 function operator(r: Record<string, unknown>): Record<string, unknown> | null {
   if (r.operator_kind == null || expired(r.operator_valid_until)) return null
+  if (r.pattern === 'B' && expired(r.sc_valid_until)) return null
   return {
     kind: r.operator_kind,
     name: r.org_name ?? r.persona_name ?? null,
