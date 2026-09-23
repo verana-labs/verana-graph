@@ -34,7 +34,7 @@ export function normalizeFilterValue(field: string, raw: unknown): NormalizedFil
   return { op: 'eq', value: raw }
 }
 
-export type OperandType = 'string' | 'boolean' | 'int' | 'bigint' | 'dateTime'
+export type OperandType = 'string' | 'boolean' | 'int' | 'bigint' | 'numeric' | 'dateTime'
 
 export interface FieldSpec {
   ops: Operator[]
@@ -54,10 +54,17 @@ function isInteger(v: unknown, max: number): boolean {
 }
 
 const OPERANDS: Record<OperandType, { label: string; accepts: (v: unknown) => boolean }> = {
-  string: { label: 'a string', accepts: v => typeof v === 'string' },
+  string: {
+    label: 'a string without NUL characters',
+    accepts: v => typeof v === 'string' && !v.includes('\0'),
+  },
   boolean: { label: 'true or false', accepts: v => typeof v === 'boolean' },
   int: { label: 'an integer from 0 to 2147483647', accepts: v => isInteger(v, 2147483647) },
   bigint: { label: 'a non-negative integer', accepts: v => isInteger(v, Number.MAX_SAFE_INTEGER) },
+  numeric: {
+    label: 'a non-negative integer of at most 38 digits',
+    accepts: v => isInteger(v, Number.MAX_SAFE_INTEGER) || (typeof v === 'string' && /^\d{1,38}$/.test(v)),
+  },
   // Postgres has no year 0
   dateTime: {
     label: 'an ISO 8601 date-time',
@@ -286,7 +293,7 @@ export const ECOSYSTEM_FILTERS: Record<string, FieldSpec> = {
 }
 
 export const CORPORATION_FILTERS: Record<string, FieldSpec> = {
-  deposit: spec('c.deposit_amount', 'bigint', ['range'], null),
+  deposit: spec('c.deposit_amount', 'numeric', ['range'], null),
   slashedEvents: spec('c.slashed_events', 'int', ['range'], null),
   lastSlashedAtTime: spec('c.last_slashed_at_time', 'dateTime', ['range'], null),
 }

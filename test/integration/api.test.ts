@@ -323,12 +323,13 @@ describe('read APIs against a bootstrapped graph', () => {
       expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
     })
 
-    it('TG-ERR-1: a filter value of the wrong type returns INVALID_INPUT with 400, never a 500', async () => {
+    it('TG-ERR-1: a filter value of the wrong type or a NUL character returns INVALID_INPUT with 400, never a 500', async () => {
       for (const [surface, filters] of [
         ['Did', { 'Did.corporationId': 'abc' }],
         ['Did', { 'Participant.ecosystemId': 'x' }],
         ['Did', { 'Did.isCorporation': 1 }],
         ['Did', { 'Did.isEcosystem': 'true' }],
+        ['Did', { 'Did.pattern': 'A\u0000' }],
         ['Ecosystem', { archived: 'yes' }],
         ['Ecosystem', { issuedCredentials: { range: { gte: 'abc' } } }],
         ['Corporation', { deposit: { range: { gte: '40000000uvna' } } }],
@@ -342,8 +343,14 @@ describe('read APIs against a bootstrapped graph', () => {
         expect(validateError(body)).toBe(true)
         expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
       }
-      const { status } = await search({ surface: 'Did', filters: { 'Did.corporationId': '42' } })
-      expect(status).toBe(200)
+      expect((await search({ surface: 'Did', freeText: 'a\u0000' })).status).toBe(400)
+      for (const [surface, filters] of [
+        ['Did', { 'Did.corporationId': '42' }],
+        ['Corporation', { deposit: { range: { lte: '100000000000000000000' } } }],
+      ] as const) {
+        const { status } = await search({ surface, filters })
+        expect(status, JSON.stringify(filters)).toBe(200)
+      }
     })
 
     it('TG-ERR-1: unparseable bodies and non-POST methods return INVALID_INPUT with 400', async () => {

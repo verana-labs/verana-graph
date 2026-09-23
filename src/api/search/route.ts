@@ -453,6 +453,9 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex): void {
       const detail = (validate.errors ?? []).map(e => `${e.instancePath || '/'} ${e.message}`).join('; ')
       throw new ApiError('INVALID_INPUT', `request does not match search schema: ${detail}`)
     }
+    if (req.freeText?.includes('\0')) {
+      throw new ApiError('INVALID_INPUT', 'freeText must not contain NUL characters')
+    }
     const def = SURFACES[req.surface]
     const wanted = req.snippet
       ? Object.keys(req.snippet).filter(k => req.snippet?.[k] === true)
