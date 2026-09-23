@@ -601,6 +601,54 @@ describe('read APIs against a bootstrapped graph', () => {
       expect(await keysOf('CredentialSchema')).toEqual(['archived', 'ecosystemId'])
       expect(await keysOf('ServiceEndpoint')).toEqual(['type'])
     })
+
+    it('TG-FCT-3: prefix takes % and _ literally', async () => {
+      const matches = async (prefix: string): Promise<string[]> => {
+        const { body } = await search({ surface: 'Did', filters: { 'Did.operatorName': { prefix } } })
+        return (body as { hits: { id: string }[] }).hits.map(h => h.id).sort()
+      }
+      expect(await matches('Acme')).toEqual([DIDS.issuer, DIDS.vs].sort())
+      expect(await matches('_cme')).toEqual([])
+      expect(await matches('%')).toEqual([])
+    })
+
+    it('TG-ACT-1: ECS data past its validUntil leaves groups, filters, facets and free text', async () => {
+      const past = '2000-01-01T00:00:00Z'
+      await db('dids').whereIn('did', [DIDS.vs, DIDS.eco]).update({ sc_valid_until: past })
+      await db('dids').where('did', DIDS.issuer).update({ operator_valid_until: past })
+      try {
+        const all = await search({ surface: 'Did' })
+        expect(validateSearch(all.body)).toBe(true)
+        const b = all.body as {
+          hits: { id: string; snippet: Record<string, unknown> }[]
+          facets: Record<string, unknown>
+        }
+        const vs = b.hits.find(h => h.id === DIDS.vs)?.snippet
+        expect(vs?.service).toBeNull()
+        expect((vs?.operator as { name: string }).name).toBe('Acme GmbH')
+        expect(b.hits.find(h => h.id === DIDS.issuer)?.snippet.operator).toBeNull()
+        expect(b.facets['EcsCredential.ServiceCredential.type']).toEqual([])
+        expect(b.facets['OrganizationCredential.countryCode']).toEqual([{ value: 'DE', count: 1 }])
+
+        const ids = async (payload: Record<string, unknown>): Promise<unknown[]> =>
+          ((await search(payload)).body as { hits: { id: unknown }[] }).hits.map(h => h.id)
+        expect(
+          await ids({ surface: 'Did', filters: { 'OrganizationCredential.countryCode': 'DE' } }),
+        ).toEqual([DIDS.vs])
+        expect(await ids({ surface: 'Did', freeText: 'baby' })).toEqual([])
+        expect(await ids({ surface: 'Did', freeText: 'acme' })).toEqual([DIDS.vs])
+        expect(await ids({ surface: 'Ecosystem', freeText: 'banking' })).toEqual([])
+        expect(await ids({ surface: 'Ecosystem', freeText: 'acme' })).toEqual([7])
+
+        const eco = await search({ surface: 'Ecosystem' })
+        const card = (eco.body as { hits: { snippet: { didCard: Record<string, unknown> } }[] }).hits[0]
+        expect(card?.snippet.didCard.service).toBeNull()
+      } finally {
+        await db('dids')
+          .whereIn('did', [DIDS.vs, DIDS.eco, DIDS.issuer])
+          .update({ sc_valid_until: null, operator_valid_until: null })
+      }
+    })
   })
 
   describe('snippet projection (TG-FCT-6a/6b/6c)', () => {

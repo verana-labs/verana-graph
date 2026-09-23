@@ -77,14 +77,17 @@ describe('denormalisation helpers', () => {
       {
         ecsSchema: 'PersonaCredential',
         credentialSubject: { id: 'did:p', name: '@fabrice', controllerCountryCode: 'FR' },
+        validUntil: null,
       },
       {
         ecsSchema: 'OrganizationCredential',
         credentialSubject: { id: 'did:o', name: 'Acme', countryCode: 'DE' },
+        validUntil: '2030-01-01T00:00:00Z',
       },
     ])
     expect(id.operatorKind).toBe('Organization')
     expect(id.orgCountryCode).toBe('DE')
+    expect(id.operatorValidUntil).toBe('2030-01-01T00:00:00Z')
   })
 
   it('extractSubjectText walks nested claims and skips the subject id', () => {
