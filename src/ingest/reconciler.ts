@@ -33,6 +33,11 @@ function freshness(e: Evidence) {
   return { last_observed_at_time: e.blockTime, last_observed_at_block: e.block }
 }
 
+// https://www.w3.org/TR/did-core/#relative-did-urls
+function absoluteServiceId(did: string, id: string): string {
+  return id.startsWith('#') ? `${did}${id}` : id
+}
+
 // deterministic fallback when upstream omits the credential id
 export function ecsCredentialId(entry: EcsCredentialEntry): { id: string; synthetic: boolean } {
   if (entry.id) return { id: entry.id, synthetic: false }
@@ -205,13 +210,13 @@ async function upsertServiceEndpoints(trx: Knex, r: ResolveResponse, e: Evidence
     .where('did_id', r.did)
     .whereNotIn(
       'id',
-      entries.map(s => s.id),
+      entries.map(s => absoluteServiceId(r.did, s.id)),
     )
     .delete()
   for (const s of entries) {
     await trx('service_endpoints')
       .insert({
-        id: s.id,
+        id: absoluteServiceId(r.did, s.id),
         did_id: r.did,
         type: s.type,
         service_endpoint: JSON.stringify(s.serviceEndpoint),
@@ -238,7 +243,7 @@ async function upsertPresentations(trx: Knex, r: ResolveResponse, e: Evidence): 
   }
   for (const p of entries) {
     await trx('linked_vps')
-      .insert({ id: p.id, service_id: p.serviceId, did_id: r.did, ...freshness(e) })
+      .insert({ id: p.id, service_id: absoluteServiceId(r.did, p.serviceId), did_id: r.did, ...freshness(e) })
       .onConflict('id')
       .merge()
     const vtcIds = p.vtcCredentials.map(v => v.id)

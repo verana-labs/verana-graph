@@ -429,6 +429,36 @@ describe('ingestion lifecycle', () => {
     expect(Number((await db('linked_vps').count('* as n').first())?.n)).toBe(0)
   })
 
+  it('relative service ids resolve against their own DID', async () => {
+    await bootstrapped()
+    const files = { id: '#files', type: 'relativeRef', serviceEndpoint: 'https://files.mock' }
+    const vs = structuredClone(vsSnapshot())
+    vs.services?.push({ ...files, id: `${DIDS.vs}#files` }, files)
+    const vp = vs.presentations?.[0]
+    if (vp) vp.serviceId = '#vp1'
+    const issuer = structuredClone(issuerSnapshot())
+    issuer.services?.push(files)
+    mock.world.snapshots.get(DIDS.vs)?.set(100, vs)
+    mock.world.snapshots.get(DIDS.issuer)?.set(100, issuer)
+    mock.pushBlock(
+      block(100, [
+        { did: DIDS.vs, services: true, presentations: true },
+        { did: DIDS.issuer, services: true },
+      ]),
+    )
+
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 100)
+    const rows = await db('service_endpoints')
+      .where('type', 'relativeRef')
+      .orderBy('id')
+      .select('id', 'did_id')
+    expect(rows).toEqual([
+      { id: `${DIDS.issuer}#files`, did_id: DIDS.issuer },
+      { id: `${DIDS.vs}#files`, did_id: DIDS.vs },
+    ])
+    expect((await db('linked_vps').where('did_id', DIDS.vs).first()).service_id).toBe(`${DIDS.vs}#vp1`)
+  })
+
   it('TG-INGEST-5: a live gap is recovered via listChanges with identical terminal state', async () => {
     await bootstrapped()
     // blocks 100-101 never arrive over the WS; block 102 exposes the gap
