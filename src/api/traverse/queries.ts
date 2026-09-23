@@ -443,7 +443,7 @@ async function assertNode(db: Knex, n: PathNode): Promise<void> {
 export async function f1(db: Knex, input: { from: PathNode; to: PathNode }): Promise<Json | null> {
   await assertNode(db, input.from)
   await assertNode(db, input.to)
-  const key = (n: PathNode) => `${n.type}:${n.id}`
+  const key = (n: PathNode) => `${n.type}:${NODE_TABLES[n.type]?.[2] ? Number(n.id) : n.id}`
   const start = { node: input.from, path: [] as { node: PathNode; edge?: string }[] }
   const target = key(input.to)
   const visited = new Set<string>([key(input.from)])

@@ -357,6 +357,10 @@ describe('read APIs against a bootstrapped graph', () => {
         from: { type: 'Ecosystem', id: '7' },
         to: { type: 'Participant', id: 20 },
       })
+      const padded = await traverse('F1', {
+        from: { type: 'Ecosystem', id: '7' },
+        to: { type: 'Participant', id: '020' },
+      })
       await eco.clone().update({ credential_schema_ids: [100, 101] })
       await db('participants').where('id', 20).update({ credential_schema_id: 100, corporation_id: 42 })
 
@@ -366,6 +370,7 @@ describe('read APIs against a bootstrapped graph', () => {
         { node: { type: 'CredentialSchema', id: 998 }, edge: 'FOR_SCHEMA' },
         { node: { type: 'Participant', id: 20 } },
       ])
+      expect((padded.body as { output: unknown }).output).toEqual((body as { output: unknown }).output)
     })
 
     it('F1 returns UNKNOWN_ID for an endpoint that resolves to no record', async () => {
