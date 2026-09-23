@@ -273,7 +273,11 @@ async function upsertPresentations(trx: Knex, r: ResolveResponse, e: Evidence): 
 }
 
 async function upsertEcsCredentials(trx: Knex, r: ResolveResponse, e: Evidence): Promise<void> {
-  const entries = (r.ecsCredentials ?? []).filter(c => c.ecsSchema !== 'UserAgentCredential')
+  // id is unique per response by contract. On a duplicate, Organization and Persona sort ahead of
+  // ServiceCredential and win, because operator derivation reads them back from rows
+  const entries = (r.ecsCredentials ?? [])
+    .filter(c => c.ecsSchema !== 'UserAgentCredential')
+    .sort((a, b) => a.ecsSchema.localeCompare(b.ecsSchema))
   const ids = entries.map(c => ecsCredentialId(c).id)
   await trx('ecs_credentials').where('subject_did', r.did).whereNotIn('id', ids).delete()
   // record-level expiry observed on this DID's own records (TG-ACT-1)
@@ -282,9 +286,13 @@ async function upsertEcsCredentials(trx: Knex, r: ResolveResponse, e: Evidence):
     .whereNotNull('valid_until')
     .where('valid_until', '<', trx.fn.now())
     .delete()
+  const written = new Set<string>()
   for (const c of entries) {
     const { id, synthetic } = ecsCredentialId(c)
     if (c.validUntil && new Date(c.validUntil).getTime() < Date.now()) continue
+    const key = `${c.credentialSubject.id} ${id}`
+    if (written.has(key)) continue
+    written.add(key)
     await trx('ecs_credentials')
       .insert({
         id,
@@ -303,7 +311,7 @@ async function upsertEcsCredentials(trx: Knex, r: ResolveResponse, e: Evidence):
         credential_subject: JSON.stringify(c.credentialSubject),
         ...freshness(e),
       })
-      .onConflict('id')
+      .onConflict(['subject_did', 'id'])
       .merge()
   }
 }
