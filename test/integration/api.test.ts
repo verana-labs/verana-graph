@@ -115,13 +115,16 @@ describe('read APIs against a bootstrapped graph', () => {
     it('A1 on a DID with no adopting Corporation emits corporationId null', async () => {
       const { status, body } = await traverse('A1', { did: DIDS.orphan })
       expect(status).toBe(200)
-      const out = (body as { output: { corporationId: number | null; expiresAtTime: string | null } }).output
+      const out = (
+        body as { output: { corporationId: number | null; expiresAtTime: string | null; pattern: null } }
+      ).output
       expect(out.corporationId).toBeNull()
       expect(out.expiresAtTime).toBeNull()
-      // untrusted DID, so the only schema error must be the known pattern deviation
+      expect(out.pattern).toBeNull()
+      // the only schema error must be the known corporationId deviation, see migration 0002
       validateTraverse(body)
-      const missing = (validateTraverse.errors ?? []).map(e => e.params?.missingProperty).filter(Boolean)
-      expect(missing).toEqual(['pattern'])
+      const paths = (validateTraverse.errors ?? []).map(e => e.instancePath).filter(Boolean)
+      expect(new Set(paths)).toEqual(new Set(['/output/corporationId']))
     })
 
     it('A2 on a DID with no adopting Corporation returns corporation null', async () => {
@@ -178,6 +181,34 @@ describe('read APIs against a bootstrapped graph', () => {
       expect((body as { output: unknown[] }).output).toHaveLength(2)
     })
 
+    it('TG-QRY-3: a corporation, schema or ecosystem not yet materialised comes back id-only', async () => {
+      const cred = db('ecs_credentials').where('id', 'urn:cred:sc:vs')
+      await db('dids').where('did', DIDS.vs).update({ corporation_id: 999 })
+      await cred.clone().update({ credential_schema_id: 998, ecosystem_id: 997 })
+      await db('participants').where('id', 20).update({ credential_schema_id: 998, ecosystem_id: 997 })
+      await db('participants').where('id', 21).update({ credential_schema_id: 998 })
+      const [a2, a5, a6, a7, b1] = await Promise.all([
+        traverse('A2', { did: DIDS.vs }),
+        traverse('A5', { did: DIDS.vs }),
+        traverse('A6', { did: DIDS.issuer }),
+        traverse('A7', { did: DIDS.vs }),
+        traverse('B1', { did: DIDS.vs, credentialId: 'urn:cred:sc:vs' }),
+      ])
+      await db('dids').where('did', DIDS.vs).update({ corporation_id: 42 })
+      await cred.clone().update({ credential_schema_id: 100, ecosystem_id: 7 })
+      await db('participants').where('id', 20).update({ credential_schema_id: 100, ecosystem_id: 7 })
+      await db('participants').where('id', 21).update({ credential_schema_id: 101 })
+
+      for (const r of [a2, a5, a6, a7, b1]) expectValidTraverse(r.body)
+      const idOnly = expect.objectContaining({ schema: { id: 998 }, ecosystem: { id: 997 } })
+      const out = (r: { body: never }) => (r.body as { output: never }).output
+      expect(out(a2)).toEqual({ corporation: { id: 999 }, ecosystems: [expect.objectContaining({ id: 7 })] })
+      expect(out(a5)).toEqual([idOnly])
+      expect((out(a6) as { ecsCredentials: unknown[] }).ecsCredentials).toContainEqual(idOnly)
+      expect((out(a7) as unknown[])[0]).toEqual(idOnly)
+      expect(out(b1)).toEqual(idOnly)
+    })
+
     it('TG-QRY-6: limit bounds the page and nextCursor walks the rest', async () => {
       const first = await traverse('A7', { did: DIDS.vs }, { limit: 1 })
       const page1 = first.body as { output: unknown[]; nextCursor: string | null }
@@ -224,6 +255,14 @@ describe('read APIs against a bootstrapped graph', () => {
       const { body } = await traverse('B2', { did: DIDS.vs, credentialId: 'urn:vtc:cert:vs' })
       expectValidTraverse(body)
       expect((body as { output: { subjectDid: string } }).output.subjectDid).toBe(DIDS.vs)
+    })
+
+    it('B1 and B2 match a VTC only among the VTCs the did presents', async () => {
+      for (const query of ['B1', 'B2']) {
+        const { status, body } = await traverse(query, { did: DIDS.issuer, credentialId: 'urn:vtc:cert:vs' })
+        expect(status).toBe(404)
+        expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_ID')
+      }
     })
 
     it('C1 owned schemas', async () => {
@@ -278,10 +317,48 @@ describe('read APIs against a bootstrapped graph', () => {
 
     it('F1 returns null when no path exists', async () => {
       const { body } = await traverse('F1', {
-        from: { type: 'Did', id: DIDS.plain },
-        to: { type: 'CredentialSchema', id: 999999 },
+        from: { type: 'Did', id: DIDS.orphan },
+        to: { type: 'CredentialSchema', id: 100 },
       })
+      expectValidTraverse(body)
       expect((body as { output: unknown }).output).toBeNull()
+    })
+
+    it('F1 walks service, VP and VTC edges', async () => {
+      const se = await traverse('F1', {
+        from: { type: 'Did', id: DIDS.vs },
+        to: { type: 'ServiceEndpoint', id: `${DIDS.vs}#mcp` },
+      })
+      expectValidTraverse(se.body)
+      expect((se.body as { output: unknown }).output).toEqual([
+        { node: { type: 'Did', id: DIDS.vs }, edge: 'EXPOSES_SERVICE' },
+        { node: { type: 'ServiceEndpoint', id: `${DIDS.vs}#mcp` } },
+      ])
+      const vp = await traverse('F1', {
+        from: { type: 'LinkedVerifiablePresentation', id: 'https://vs.mock/vp1.json' },
+        to: { type: 'Ecosystem', id: 7 },
+      })
+      expectValidTraverse(vp.body)
+      expect((vp.body as { output: unknown }).output).toEqual([
+        {
+          node: { type: 'LinkedVerifiablePresentation', id: 'https://vs.mock/vp1.json' },
+          edge: 'CONTAINS_VTC',
+        },
+        { node: { type: 'Vtc', id: 'urn:vtc:cert:vs' }, edge: 'GOVERNED_BY' },
+        { node: { type: 'Ecosystem', id: 7 } },
+      ])
+    })
+
+    it('F1 returns UNKNOWN_ID for an endpoint that resolves to no record', async () => {
+      for (const from of [
+        { type: 'EcsCredential', id: 'urn:cred:nope' },
+        { type: 'CredentialSchema', id: 999999 },
+        { type: 'Corporation', id: 'not-an-id' },
+      ]) {
+        const { status, body } = await traverse('F1', { from, to: { type: 'Did', id: DIDS.vs } })
+        expect(status).toBe(404)
+        expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_ID')
+      }
     })
 
     it('G1 validator chain runs root to leaf', async () => {

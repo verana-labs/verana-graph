@@ -150,6 +150,8 @@ export function registerDocs(app: FastifyInstance): void {
 
 Collection queries take \`limit\` (1..500, default 100) and \`cursor\`. Non-ACTIVE participants appear in traversal with their true state while referenced (TG-ACT-1), search never returns them.
 
+In A2, A5, A6, A7 and B1 a corporation, schema or ecosystem whose record is not loaded yet comes back as \`{ id }\` (TG-QRY-3).
+
 Errors (TG-ERR-1 envelope): \`INVALID_INPUT\`, \`UNKNOWN_QUERY\`, \`UNKNOWN_ID\`, \`UNKNOWN_FILTER_FIELD\`, \`INVALID_CURSOR\`, \`INTERNAL\` (500).`,
           requestBody: {
             required: true,
