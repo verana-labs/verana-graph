@@ -9,6 +9,7 @@ import { decodeCursor, encodeCursor, queryHash } from './cursor'
 import {
   applyParticipantExists,
   assertOperandTypes,
+  ecsLive,
   normalizeFilterValue,
   resolveFieldSpec,
 } from './registry'
@@ -37,6 +38,8 @@ interface SurfaceDef {
   pk: string
   // TG-FCT-5 ranking signals; direction is normative, weights are ours
   scoreExpr: string
+  // TG-ACT-1: the search document without the text of expired ECS credentials
+  liveVec?: string
   gates: (q: Knex.QueryBuilder, req: SearchRequest) => void
   coreSelect?: (q: Knex.QueryBuilder) => void
   core: (row: Record<string, unknown>) => Record<string, unknown>
@@ -49,8 +52,10 @@ const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : String(v))
 
 const ENTRIES_CAP = 100
 
+const expired = (v: unknown): boolean => v != null && new Date(v as string | Date).getTime() < Date.now()
+
 function service(r: Record<string, unknown>): Record<string, unknown> | null {
-  if (r.sc_name == null) return null
+  if (r.sc_name == null || expired(r.sc_valid_until)) return null
   return {
     pattern: r.pattern ?? null,
     name: r.sc_name,
@@ -62,7 +67,8 @@ function service(r: Record<string, unknown>): Record<string, unknown> | null {
 }
 
 function operator(r: Record<string, unknown>): Record<string, unknown> | null {
-  if (r.operator_kind == null) return null
+  if (r.operator_kind == null || expired(r.operator_valid_until)) return null
+  if (r.pattern === 'B' && expired(r.sc_valid_until)) return null
   return {
     kind: r.operator_kind,
     name: r.org_name ?? r.persona_name ?? null,
@@ -143,6 +149,8 @@ const DID_CARD_COLUMNS = [
   'persona_avatar_uri',
   'persona_avatar_digest_sri',
   'persona_country_code',
+  'sc_valid_until',
+  'operator_valid_until',
 ]
 
 function didCardSql(boundExpr: string): string {
@@ -150,6 +158,25 @@ function didCardSql(boundExpr: string): string {
   return `(select jsonb_build_object(${columns},
       'is_trust_expired', bd.expires_at_time is not null and bd.expires_at_time < now())
     from dids bd where bd.did = ${boundExpr}) as g_did_card`
+}
+
+// mirrors the generated search_vec columns (0011) with the expired ECS parts left out
+const DID_LIVE_VEC = `(case when ${ecsLive('d', 'sc')} and ${ecsLive('d', 'operator')} then d.search_vec else
+  setweight(to_tsvector('simple', search_tokens(case when ${ecsLive('d', 'sc')}
+    then concat_ws(' ', d.sc_name, d.sc_description) else '' end)), 'A') ||
+  setweight(to_tsvector('simple', search_tokens(concat_ws(' ', case when ${ecsLive('d', 'operator')}
+    then concat_ws(' ', d.org_name, d.org_address, d.persona_name, d.persona_description) end,
+    d.vtc_text))), 'B') ||
+  setweight(to_tsvector('simple', search_tokens(coalesce(d.schema_text, ''))), 'C') end)`
+
+function boundLiveVec(alias: string, gfText: string): string {
+  return `coalesce((select
+      setweight(to_tsvector('simple', search_tokens(concat_ws(' ',
+        case when ${ecsLive('bd', 'sc')} then concat_ws(' ', bd.sc_name, bd.sc_description) end,
+        case when ${ecsLive('bd', 'operator')} then coalesce(bd.org_name, bd.persona_name) end))), 'A') ||
+      setweight(to_tsvector('simple', search_tokens(coalesce(${alias}.${gfText}, ''))), 'D')
+    from dids bd where bd.did = ${alias}.did
+      and not (${ecsLive('bd', 'sc')} and ${ecsLive('bd', 'operator')})), ${alias}.search_vec)`
 }
 
 const DID_ENDPOINTS_SQL = `(select coalesce(json_agg(json_build_object(
@@ -210,6 +237,7 @@ const SURFACES: Record<Surface, SurfaceDef> = {
       coalesce(ln(1 + coalesce(corp.deposit_amount, 0) / 1000000.0) * 0.5, 0)
       - coalesce(corp.slashed_events, 0) * 0.5
       + extract(epoch from d.last_observed_at_time) / 1e12`,
+    liveVec: DID_LIVE_VEC,
     gates(q, req) {
       // Did.trusted = true is overridable; the trust-expiry gate never is (TG-FCT-2)
       if (!req.includeUntrusted) q.where('d.trusted', true)
@@ -263,6 +291,7 @@ const SURFACES: Record<Surface, SurfaceDef> = {
     scoreExpr: `
       ln(1 + coalesce(e.issued_credentials, 0) + coalesce(e.verified_credentials, 0)) * 0.3
       + extract(epoch from e.last_observed_at_time) / 1e12`,
+    liveVec: boundLiveVec('e', 'egf_text'),
     gates(q, req) {
       if (!req.includeArchived) q.where('e.archived', false)
       // hidden when the controlling DID is trust-expired, never overridable (TG-FCT-2/TG-ACT-3)
@@ -306,6 +335,7 @@ const SURFACES: Record<Surface, SurfaceDef> = {
       coalesce(ln(1 + coalesce(c.deposit_amount, 0) / 1000000.0) * 0.5, 0)
       - c.slashed_events * 0.5
       + extract(epoch from c.last_observed_at_time) / 1e12`,
+    liveVec: boundLiveVec('c', 'cgf_text'),
     gates(q) {
       q.whereNotExists(function () {
         this.select(1)
@@ -490,14 +520,17 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex): void {
       if (chunks === null) q.whereRaw('false')
       for (const chunk of chunks ?? []) {
         q.whereRaw(`${def.alias}.search_vec @@ plainto_tsquery('simple', ?)`, [chunk])
+        // the stored document holds every live token, so it stays the indexed prefilter
+        if (def.liveVec) q.whereRaw(`${def.liveVec} @@ plainto_tsquery('simple', ?)`, [chunk])
       }
       return { q, facetSpecs }
     }
 
     // float8 end to end: NUMERIC scores round-trip through JS as lossy strings and break the
     // keyset boundary comparison
+    const vec = def.liveVec ?? `${def.alias}.search_vec`
     const scoreSelect = chunks?.length
-      ? `(ts_rank(${def.alias}.search_vec, plainto_tsquery('simple', ?)) * 10 + ${def.scoreExpr})::float8`
+      ? `(ts_rank(${vec}, plainto_tsquery('simple', ?)) * 10 + ${def.scoreExpr})::float8`
       : `(${def.scoreExpr})::float8`
     const scoreBindings = chunks?.slice(0, 1) ?? []
 
