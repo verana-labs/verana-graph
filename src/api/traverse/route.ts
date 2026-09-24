@@ -4,12 +4,24 @@ import addFormats from 'ajv-formats'
 import { FastifyInstance } from 'fastify'
 import { Knex } from 'knex'
 import { ApiError } from '../errors'
+import type { KeyType } from '../search/cursor'
 import { decodeKey, type PageReq, pageHash, resolveLimit } from './cursor'
 import * as q from './queries'
 
 type Handler = (db: Knex, input: never, page: PageReq) => Promise<unknown>
 
-const PAGINATED = new Set(['A4', 'A5', 'A6', 'A7', 'C1', 'C2', 'D1', 'D2', 'E1', 'E2'])
+const PAGINATED = new Map<string, KeyType | 'dual'>([
+  ['A4', 'text'],
+  ['A5', 'text'],
+  ['A6', 'dual'],
+  ['A7', 'int'],
+  ['C1', 'int'],
+  ['C2', 'int'],
+  ['D1', 'dual'],
+  ['D2', 'int'],
+  ['E1', 'text'],
+  ['E2', 'int'],
+])
 
 const HANDLERS: Record<string, Handler> = {
   A1: q.a1,
@@ -45,23 +57,36 @@ export function registerTraverseRoute(app: FastifyInstance, db: Knex): void {
   const validate = compileRequestSchema()
 
   // TG-QRY-5: the single REST binding endpoint, dispatching on the query selector
-  app.post('/v4/graph/traverse', async (request, reply) => {
+  app.all('/v4/graph/traverse', async (request, reply) => {
+    if (request.method !== 'POST') {
+      throw new ApiError('INVALID_INPUT', `${request.method} is not supported, use POST`)
+    }
     const body = request.body as { query?: string; input?: unknown; limit?: unknown; cursor?: string }
-    if (typeof body?.query === 'string' && !HANDLERS[body.query]) {
+    if (typeof body?.query === 'string' && !Object.hasOwn(HANDLERS, body.query)) {
       throw new ApiError('UNKNOWN_QUERY', `unknown query ${body.query}`)
     }
     if (!validate(body)) {
       const detail = (validate.errors ?? []).map(e => `${e.instancePath || '/'} ${e.message}`).join('; ')
       throw new ApiError('INVALID_INPUT', `request does not match traverse schema: ${detail}`)
     }
+    const values = Object.values(body.input as object).flatMap(v =>
+      v && typeof v === 'object' ? Object.values(v) : [v],
+    )
+    if (values.some(v => typeof v === 'string' && v.includes('\0'))) {
+      throw new ApiError('INVALID_INPUT', 'input strings must not contain NUL characters')
+    }
+    // ids are int8 columns, so a larger id names no record and would fail the Postgres cast
+    const outOfRange = values.find(v => typeof v === 'number' && v >= 2 ** 63)
+    if (outOfRange !== undefined) throw new ApiError('UNKNOWN_ID', `unknown id ${outOfRange}`)
     const handler = HANDLERS[body.query as string]
     if (!handler) throw new ApiError('UNKNOWN_QUERY', `unknown query ${body.query}`)
     const query = body.query as string
-    const paginated = PAGINATED.has(query)
+    const keyType = PAGINATED.get(query)
+    const paginated = keyType !== undefined
     const hash = pageHash(query, body.input)
     const page: PageReq = {
       limit: resolveLimit(body.limit),
-      after: paginated ? decodeKey(body.cursor, hash) : null,
+      after: paginated ? decodeKey(body.cursor, hash, keyType) : null,
       hash,
     }
     const result = await handler(db, body.input as never, page)
