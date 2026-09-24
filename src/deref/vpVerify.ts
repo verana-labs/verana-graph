@@ -73,9 +73,7 @@ function methodFromDoc(
 
 // a relationship may reference the method by id string or embed it
 function relationshipAllows(doc: DidDocumentLike, relationship: Relationship, methodId: string): boolean {
-  const refs = doc[relationship]
-  if (!refs) return doc.verificationMethod?.some(m => m.id === methodId) ?? false
-  return refs.some(m => (typeof m === 'string' ? m === methodId : m.id === methodId))
+  return doc[relationship]?.some(m => (typeof m === 'string' ? m === methodId : m.id === methodId)) ?? false
 }
 
 function decodeProofValue(proofValue: unknown): Uint8Array | null {
@@ -111,9 +109,8 @@ export async function verifyVpSignature(
   if (methodId.split('#')[0] !== holderDid) {
     return { verified: false, reason: 'proof verificationMethod is not the holder DID' }
   }
-  // jsigs' authentication purpose needs a challenge, which linked VPs never carry
   const purpose = proof?.proofPurpose
-  if (purpose !== 'assertionMethod' && !(eddsaJcs && purpose === 'authentication')) {
+  if (purpose !== 'assertionMethod' && purpose !== 'authentication') {
     return { verified: false, reason: `unsupported proof purpose ${purpose}` }
   }
 
@@ -156,7 +153,7 @@ export async function verifyVpSignature(
     controller: method.controller ?? holderDid,
     publicKeyMultibase: method.publicKeyMultibase,
   })
-  // the method's membership and assertion authorization were checked natively against the real
+  // the method's membership and relationship authorization were checked natively against the real
   // resolved document above; jsigs only needs a context-clean controller doc restating them
   // (real DID documents reference arbitrary contexts this verifier does not vendor)
   const ed25519Method = {

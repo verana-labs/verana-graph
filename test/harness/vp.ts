@@ -39,6 +39,7 @@ export async function signVp(
   key: unknown,
   holder: string,
   claims: Record<string, unknown> = {},
+  purpose: unknown = new jsigs.purposes.AssertionProofPurpose(),
 ): Promise<Record<string, unknown>> {
   const vp = {
     '@context': ['https://www.w3.org/2018/credentials/v1', 'https://www.w3.org/ns/credentials/examples/v2'],
@@ -49,7 +50,7 @@ export async function signVp(
   }
   return (await jsigs.sign(vp, {
     suite: new Ed25519Signature2020({ key }),
-    purpose: new jsigs.purposes.AssertionProofPurpose(),
+    purpose,
     documentLoader: loader,
   })) as Record<string, unknown>
 }

@@ -1,3 +1,4 @@
+import jsigs from 'jsonld-signatures'
 import { describe, expect, it } from 'vitest'
 import { type DidDocumentLike, verifyVpSignature } from '../../src/deref/vpVerify'
 import { makeHolder, signVp } from '../harness/vp'
@@ -107,6 +108,32 @@ describe('TG-DEREF-3 VP signature re-verification', () => {
     const verdict = await verifyVpSignature(vp, 'did:webvh:test:someone.else', async () => doc)
     expect(verdict.verified).toBe(false)
     expect(verdict.reason).toContain('not the holder DID')
+  })
+
+  it('accepts an Ed25519Signature2020 authentication proof from a key listed under authentication', async () => {
+    const { key, doc } = await makeHolder(HOLDER)
+    doc.authentication = [key.id]
+    const vp = await signVp(
+      key,
+      HOLDER,
+      {},
+      new jsigs.purposes.AuthenticationProofPurpose({ challenge: 'c' }),
+    )
+    const verdict = await verifyVpSignature(vp, HOLDER, async () => doc)
+    expect(verdict).toEqual({ verified: true })
+  })
+
+  it('rejects a proof purpose whose relationship the DID document does not list', async () => {
+    const { key, doc } = await makeHolder(HOLDER)
+    const vp = await signVp(
+      key,
+      HOLDER,
+      {},
+      new jsigs.purposes.AuthenticationProofPurpose({ challenge: 'c' }),
+    )
+    const verdict = await verifyVpSignature(vp, HOLDER, async () => doc)
+    expect(verdict.verified).toBe(false)
+    expect(verdict.reason).toContain('not authorized for authentication')
   })
 
   it('accepts a devnet VP signed with DataIntegrityProof eddsa-jcs-2022', async () => {
