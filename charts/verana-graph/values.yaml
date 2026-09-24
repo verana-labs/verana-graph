@@ -36,7 +36,6 @@ config:
   indexerWsUrl: ""
   fetchGfDocBodies: "false"
   fetchVpBodies: "true"
-  gateServiceEndpoints: "false"
   gapCoalesceThreshold: "1000"
   bpsMaxBufferedBytes: "1048576"
   trustRefreshIntervalMs: "300000"

@@ -57,7 +57,7 @@ describe('read APIs against a bootstrapped graph', () => {
       throw err
     })
     registerTraverseRoute(app, db)
-    registerSearchRoute(app, db, config)
+    registerSearchRoute(app, db)
     registerDocs(app)
     await app.listen({ port: 0 })
     attachBlockProgressServer(app.server, orchestrator, config.bpsMaxBufferedBytes, log)
@@ -357,6 +357,21 @@ describe('read APIs against a bootstrapped graph', () => {
       const open = await search({ surface: 'Did', filters: {}, includeUntrusted: true })
       const openIds = (open.body as { hits: { id: string }[] }).hits.map(h => h.id)
       expect(openIds).toContain(DIDS.plain)
+    })
+
+    it('TG-FCT-2: ServiceEndpoint hits follow the owning DID trust gate and includeUntrusted', async () => {
+      await db('dids').where('did', DIDS.vs).update({ trusted: false })
+      const gated = await search({ surface: 'ServiceEndpoint' })
+      const open = await search({ surface: 'ServiceEndpoint', includeUntrusted: true })
+      await db('dids').where('did', DIDS.vs).update({ trusted: true })
+
+      const g = gated.body as { totalCount: number; hits: { id: string }[]; facets: Record<string, unknown> }
+      expect(g.hits.map(h => h.id)).toEqual([`${DIDS.issuer}#didcomm`])
+      expect(g.totalCount).toBe(1)
+      expect(g.facets.type).toEqual([{ value: 'did-communication', count: 1 }])
+      const o = open.body as { totalCount: number; hits: { id: string }[] }
+      expect(o.totalCount).toBe(3)
+      expect(o.hits.map(h => h.id)).toContain(`${DIDS.vs}#mcp`)
     })
 
     it('Participant.role filter answers "issuers" on the Did surface', async () => {
@@ -814,16 +829,18 @@ describe('read APIs against a bootstrapped graph', () => {
       expect((snippet.didCard as { service: { name: string } }).service.name).toBe('Baby Shoes Shop')
     })
 
-    it('an expired DID shows as expired in its card and in the owned DID entries', async () => {
+    it('an expired DID hides its endpoints and shows as expired in the owned DID entries', async () => {
       await db('dids').where('did', DIDS.issuer).update({ expires_at_time: '2000-01-01T00:00:00Z' })
-      const endpoints = await search({ surface: 'ServiceEndpoint', filters: { type: 'did-communication' } })
+      const endpoints = await search({
+        surface: 'ServiceEndpoint',
+        filters: { type: 'did-communication' },
+        includeUntrusted: true,
+      })
       const corp = await search({ surface: 'Corporation', snippet: { dids: true } })
       await db('dids').where('did', DIDS.issuer).update({ expires_at_time: '2100-01-01T00:00:00Z' })
 
-      const endpointHits = (endpoints.body as { hits: { id: string; snippet: Record<string, unknown> }[] })
-        .hits
-      const card = endpointHits.find(h => h.id === `${DIDS.issuer}#didcomm`)?.snippet.didCard
-      expect((card as { isTrustExpired: boolean }).isTrustExpired).toBe(true)
+      const endpointIds = (endpoints.body as { hits: { id: string }[] }).hits.map(h => h.id)
+      expect(endpointIds).toEqual([`${DIDS.vs}#didcomm`])
       const corpHits = (corp.body as { hits: { snippet: { dids: { entries: unknown[] } } }[] }).hits
       expect(corpHits[0]?.snippet.dids.entries).toContainEqual({
         did: DIDS.issuer,

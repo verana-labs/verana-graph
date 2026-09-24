@@ -15,7 +15,6 @@ export function testConfig(indexerBaseUrl: string, wsUrl: string): Config {
     fetchVpBodies: false,
     gapCoalesceThreshold: 1000,
     bpsMaxBufferedBytes: 1024 * 1024,
-    gateServiceEndpoints: false,
     // sweeps are exercised by an explicit test, never on a timer during e2e
     trustRefreshIntervalMs: 0,
     trustRefreshBatch: 200,
