@@ -345,6 +345,11 @@ describe('read APIs against a bootstrapped graph', () => {
       })
       expectValidTraverse(body)
       expect((body as { output: unknown }).output).toEqual([{ node: { type: 'Did', id: DIDS.vs } }])
+      const padded = await traverse('F1', {
+        from: { type: 'Participant', id: '020' },
+        to: { type: 'Participant', id: 20 },
+      })
+      expect((padded.body as { output: unknown }).output).toEqual([{ node: { type: 'Participant', id: 20 } }])
     })
 
     it('F1 neither walks nor returns an expired ECS credential', async () => {
@@ -407,7 +412,7 @@ describe('read APIs against a bootstrapped graph', () => {
 
       expectValidTraverse(body)
       expect((body as { output: unknown }).output).toEqual([
-        { node: { type: 'Ecosystem', id: '7' }, edge: 'OWNS_SCHEMA' },
+        { node: { type: 'Ecosystem', id: 7 }, edge: 'OWNS_SCHEMA' },
         { node: { type: 'CredentialSchema', id: 998 }, edge: 'FOR_SCHEMA' },
         { node: { type: 'Participant', id: 20 } },
       ])
