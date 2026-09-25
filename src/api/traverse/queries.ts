@@ -39,7 +39,7 @@ async function getDidRow(db: Knex, did: string): Promise<DidRow> {
 // A1 - trust summary: the Did record alone, no edge walk
 export async function a1(db: Knex, input: { did: string }): Promise<Json> {
   const row = await getDidRow(db, input.did)
-  const out: Json = {
+  return {
     did: row.did,
     trusted: row.trusted,
     evaluatedAtTime: row.evaluated_at_time.toISOString(),
@@ -48,33 +48,22 @@ export async function a1(db: Knex, input: { did: string }): Promise<Json> {
     isTrustExpired: isTrustExpired(row),
     lastObservedAtTime: row.last_observed_at_time.toISOString(),
     corporationId: row.corporation_id,
+    pattern: row.pattern,
   }
-  // omitted when null: the schema has no null branch for pattern (verana-spec issue filed)
-  if (row.pattern) out.pattern = row.pattern
-  return out
 }
 
-// A2 - governing chain: OPERATED_BY corp + deduplicated ecosystems via
-// PARTICIPATES_IN -> FOR_SCHEMA -> OWNS_SCHEMA
+// A2 - governing chain: OPERATED_BY corp + deduplicated ecosystems via Participant.ecosystemId (TG-EDGE-3)
 export async function a2(db: Knex, input: { did: string }): Promise<Json> {
   const row = await getDidRow(db, input.did)
-  let corp = null
+  let corporation = null
   if (row.corporation_id !== null) {
-    corp = await db('corporations').where('id', row.corporation_id).first()
-    if (!corp) {
-      throw new ApiError('UNKNOWN_ID', `corporation ${row.corporation_id} not yet materialised`)
-    }
+    const corp = await db('corporations').where('id', row.corporation_id).first()
+    corporation = corp ? corporationRef(corp) : { id: row.corporation_id }
   }
   const ecosystems = await db('ecosystems')
-    .whereIn(
-      'id',
-      db('participants as p')
-        .join('credential_schemas as cs', 'cs.id', 'p.credential_schema_id')
-        .where('p.did_id', input.did)
-        .select('cs.ecosystem_id'),
-    )
+    .whereIn('id', db('participants').where('did_id', input.did).select('ecosystem_id'))
     .orderBy('id')
-  return { corporation: corp ? corporationRef(corp) : null, ecosystems: ecosystems.map(ecosystemRef) }
+  return { corporation, ecosystems: ecosystems.map(ecosystemRef) }
 }
 
 // A3 - service endpoints (Linked-VP entries live under A4)
@@ -108,6 +97,16 @@ export async function a4(db: Knex, input: { did: string }, page: PageReq): Promi
   return { output: out, nextCursor }
 }
 
+// TG-QRY-3: a schema or ecosystem that is not yet materialised is returned as { id }
+async function enrich(db: Knex, schemaId: number, ecosystemId: number): Promise<Json> {
+  const schema = await db('credential_schemas').where('id', schemaId).first()
+  const ecosystem = await db('ecosystems').where('id', ecosystemId).first()
+  return {
+    schema: schema ? schemaRef(schema) : { id: schemaId },
+    ecosystem: ecosystem ? ecosystemRef(ecosystem) : { id: ecosystemId },
+  }
+}
+
 // A5 - held credentials (DID is subject), enriched with issuer, schema, ecosystem
 export async function a5(
   db: Knex,
@@ -125,14 +124,9 @@ export async function a5(
   const { rows: creds, nextCursor } = takePage(raw, page, r => r.id)
   const out: Json[] = []
   for (const c of creds) {
-    const schema = await db('credential_schemas').where('id', c.credential_schema_id).first()
-    const ecosystem = await db('ecosystems').where('id', c.ecosystem_id).first()
-    // enrichment refs are required by the output shape; skip until both are materialised
-    if (!schema || !ecosystem) continue
     const item: Json = {
       credential: ecsCredentialRef(c),
-      schema: schemaRef(schema),
-      ecosystem: ecosystemRef(ecosystem),
+      ...(await enrich(db, c.credential_schema_id, c.ecosystem_id)),
     }
     const issuer = await db('participants')
       .where('id', c.issuer_participant_id)
@@ -193,28 +187,20 @@ export async function a6(
   const vtcQ = input.ecsSchema ? null : db('vtcs').whereIn('issuer_participant_id', issuerIds)
   const { ecs, vtcs, nextCursor } = await fetchDualPage(ecsQ, vtcQ, page)
 
-  const enrich = async (schemaId: number, ecosystemId: number) => {
-    const schema = await db('credential_schemas').where('id', schemaId).first()
-    const ecosystem = await db('ecosystems').where('id', ecosystemId).first()
-    return schema && ecosystem ? { schema: schemaRef(schema), ecosystem: ecosystemRef(ecosystem) } : null
-  }
-
   const ecsItems: Json[] = []
   for (const c of ecs) {
-    const refs = await enrich(c.credential_schema_id, c.ecosystem_id)
-    if (refs) ecsItems.push({ credential: ecsCredentialRef(c), subjectDid: c.subject_did, ...refs })
+    const refs = await enrich(db, c.credential_schema_id, c.ecosystem_id)
+    ecsItems.push({ credential: ecsCredentialRef(c), subjectDid: c.subject_did, ...refs })
   }
   const vtcItems: Json[] = []
   for (const v of vtcs) {
-    const refs = await enrich(v.credential_schema_id, v.ecosystem_id)
+    const refs = await enrich(db, v.credential_schema_id, v.ecosystem_id)
     const holder = await db('participants').where('id', v.participant_id).first<ParticipantRow | undefined>()
-    if (refs) {
-      vtcItems.push({
-        credential: vtcRef(v),
-        ...(holder ? { subjectDid: holder.did_id } : {}),
-        ...refs,
-      })
-    }
+    vtcItems.push({
+      credential: vtcRef(v),
+      ...(holder ? { subjectDid: holder.did_id } : {}),
+      ...refs,
+    })
   }
   return { output: { ecsCredentials: ecsItems, vtcs: vtcItems }, nextCursor }
 }
@@ -232,13 +218,9 @@ export async function a7(db: Knex, input: { did: string; role?: string }, page: 
   const { rows, nextCursor } = takePage(raw, page, r => String(r.id))
   const out: Json[] = []
   for (const p of rows) {
-    const schema = await db('credential_schemas').where('id', p.credential_schema_id).first()
-    const ecosystem = await db('ecosystems').where('id', p.ecosystem_id).first()
-    if (!schema || !ecosystem) continue
     out.push({
       participant: participantRef(p),
-      schema: schemaRef(schema),
-      ecosystem: ecosystemRef(ecosystem),
+      ...(await enrich(db, p.credential_schema_id, p.ecosystem_id)),
     })
   }
   return { output: out, nextCursor }
@@ -253,7 +235,11 @@ async function findCredential(
     EcsCredentialRow | undefined
   >()
   if (ecs) return { kind: 'ecs', row: ecs }
-  const vtc = await db('vtcs').where('id', credentialId).first<VtcRow | undefined>()
+  const vtc = await db('vtcs as v')
+    .join('lvp_vtcs as lv', 'lv.vtc_id', 'v.id')
+    .join('linked_vps as vp', 'vp.id', 'lv.lvp_id')
+    .where({ 'v.id': credentialId, 'vp.did_id': did })
+    .first<VtcRow | undefined>('v.*')
   if (vtc) return { kind: 'vtc', row: vtc }
   throw new ApiError('UNKNOWN_ID', `unknown credential ${credentialId}`)
 }
@@ -267,21 +253,25 @@ export async function b1(db: Knex, input: { did: string; credentialId: string })
   if (!issuer) {
     throw new ApiError('UNKNOWN_ID', `unknown issuer participant ${found.row.issuer_participant_id}`)
   }
-  const schema = await db('credential_schemas').where('id', found.row.credential_schema_id).first()
-  const ecosystem = await db('ecosystems').where('id', found.row.ecosystem_id).first()
-  if (!schema || !ecosystem) throw new ApiError('UNKNOWN_ID', 'schema or ecosystem not materialised')
   return {
     credential: found.kind === 'ecs' ? ecsCredentialRef(found.row) : vtcRef(found.row),
     issuerDid: issuer.did_id,
     issuerParticipant: participantRef(issuer),
-    schema: schemaRef(schema),
-    ecosystem: ecosystemRef(ecosystem),
+    ...(await enrich(db, found.row.credential_schema_id, found.row.ecosystem_id)),
   }
 }
 
 // B2 - holder recovery
 export async function b2(db: Knex, input: { did: string; credentialId: string }): Promise<Json> {
   const found = await findCredential(db, input.did, input.credentialId)
+  // participantId 0 means no HOLDER Participant (self-issued, or the indexer matched none)
+  if (found.row.participant_id === 0) {
+    return {
+      credential: found.kind === 'ecs' ? ecsCredentialRef(found.row) : vtcRef(found.row),
+      subjectDid: found.kind === 'ecs' ? found.row.subject_did : input.did,
+      holderParticipant: null,
+    }
+  }
   const holder = await db('participants')
     .where('id', found.row.participant_id)
     .first<ParticipantRow | undefined>()
@@ -430,11 +420,52 @@ interface PathNode {
 
 const MAX_PATH_DEPTH = 12
 
+const NODE_TABLES: Record<string, [table: string, key: string, integerKey: boolean]> = {
+  Did: ['dids', 'did', false],
+  Corporation: ['corporations', 'id', true],
+  Ecosystem: ['ecosystems', 'id', true],
+  CredentialSchema: ['credential_schemas', 'id', true],
+  Participant: ['participants', 'id', true],
+  EcsCredential: ['ecs_credentials', 'id', false],
+  Vtc: ['vtcs', 'id', false],
+  LinkedVerifiablePresentation: ['linked_vps', 'id', false],
+  ServiceEndpoint: ['service_endpoints', 'id', false],
+}
+
+const CREDENTIAL_TABLES = [
+  ['ecs_credentials', 'EcsCredential'],
+  ['vtcs', 'Vtc'],
+] as const
+
+function live(db: Knex, table: string): Knex.QueryBuilder {
+  return table === 'ecs_credentials' ? validEcs(db(table)) : db(table)
+}
+
+async function assertNode(db: Knex, n: PathNode): Promise<void> {
+  const [table, key, integerKey] = NODE_TABLES[n.type] as [string, string, boolean]
+  // checked first: a string id against a bigint key is a Postgres cast error, not a miss
+  const typed = integerKey
+    ? /^\d+$/.test(String(n.id)) && Number.isSafeInteger(Number(n.id))
+    : typeof n.id === 'string'
+  if (!typed || !(await live(db, table).where(key, n.id).first(key))) {
+    throw new ApiError('UNKNOWN_ID', `unknown ${n.type} ${n.id}`)
+  }
+}
+
 export async function f1(db: Knex, input: { from: PathNode; to: PathNode }): Promise<Json | null> {
+  await assertNode(db, input.from)
+  await assertNode(db, input.to)
+  const norm = (n: PathNode): PathNode => ({
+    type: n.type,
+    id: NODE_TABLES[n.type]?.[2] ? Number(n.id) : n.id,
+  })
+  const from = norm(input.from)
+  const to = norm(input.to)
   const key = (n: PathNode) => `${n.type}:${n.id}`
-  const start = { node: input.from, path: [] as { node: PathNode; edge?: string }[] }
-  const target = key(input.to)
-  const visited = new Set<string>([key(input.from)])
+  const start = { node: from, path: [] as { node: PathNode; edge?: string }[] }
+  const target = key(to)
+  if (key(from) === target) return [{ node: from }] as unknown as Json
+  const visited = new Set<string>([key(from)])
   let frontier = [start]
 
   for (let depth = 0; depth < MAX_PATH_DEPTH && frontier.length > 0; depth++) {
@@ -466,8 +497,12 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
       if (d) push('Corporation', d.corporation_id, 'OPERATED_BY')
       const parts = await db('participants').where('did_id', n.id).select('id')
       for (const p of parts) push('Participant', p.id, 'PARTICIPATES_IN')
-      const creds = await db('ecs_credentials').where('subject_did', n.id).select('id')
+      const creds = await validEcs(db('ecs_credentials').where('subject_did', n.id)).select('id')
       for (const c of creds) push('EcsCredential', c.id, 'SUBJECT_OF_CREDENTIAL')
+      const services = await db('service_endpoints').where('did_id', n.id).select('id')
+      for (const s of services) push('ServiceEndpoint', s.id, 'EXPOSES_SERVICE')
+      const vps = await db('linked_vps').where('did_id', n.id).select('id')
+      for (const v of vps) push('LinkedVerifiablePresentation', v.id, 'REFERENCES_VP')
       break
     }
     case 'Corporation': {
@@ -475,20 +510,31 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
       for (const d of dids) push('Did', d.did, 'OPERATED_BY')
       const ecos = await db('ecosystems').where('corporation_id', n.id).select('id')
       for (const e of ecos) push('Ecosystem', e.id, 'CONTROLS')
+      const parts = await db('participants').where('corporation_id', n.id).select('id')
+      for (const p of parts) push('Participant', p.id, 'OWNED_BY_CORPORATION')
       break
     }
     case 'Ecosystem': {
       const eco = await db('ecosystems').where('id', n.id).first()
-      if (eco) push('Corporation', eco.corporation_id, 'CONTROLS')
-      const schemas = await db('credential_schemas').where('ecosystem_id', n.id).select('id')
-      for (const s of schemas) push('CredentialSchema', s.id, 'OWNS_SCHEMA')
+      if (eco) {
+        push('Corporation', eco.corporation_id, 'CONTROLS')
+        for (const s of eco.credential_schema_ids) push('CredentialSchema', Number(s), 'OWNS_SCHEMA')
+      }
+      for (const [table, type] of CREDENTIAL_TABLES) {
+        const creds = await live(db, table).where('ecosystem_id', n.id).select('id')
+        for (const c of creds) push(type, c.id, 'GOVERNED_BY')
+      }
       break
     }
     case 'CredentialSchema': {
-      const s = await db('credential_schemas').where('id', n.id).first()
-      if (s) push('Ecosystem', s.ecosystem_id, 'OWNS_SCHEMA')
+      const owners = await db('ecosystems').whereRaw('? = any(credential_schema_ids)', [n.id]).select('id')
+      for (const e of owners) push('Ecosystem', e.id, 'OWNS_SCHEMA')
       const parts = await db('participants').where('credential_schema_id', n.id).select('id')
       for (const p of parts) push('Participant', p.id, 'FOR_SCHEMA')
+      for (const [table, type] of CREDENTIAL_TABLES) {
+        const creds = await live(db, table).where('credential_schema_id', n.id).select('id')
+        for (const c of creds) push(type, c.id, 'BASED_ON_SCHEMA')
+      }
       break
     }
     case 'Participant': {
@@ -501,6 +547,41 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
       }
       const children = await db('participants').where('validator_participant_id', n.id).select('id')
       for (const c of children) push('Participant', c.id, 'VALIDATED_BY')
+      for (const [table, type] of CREDENTIAL_TABLES) {
+        const issued = await live(db, table).where('issuer_participant_id', n.id).select('id')
+        for (const c of issued) push(type, c.id, 'ISSUED_BY')
+        const held = await live(db, table).where('participant_id', n.id).select('id')
+        for (const c of held) push(type, c.id, 'HELD_AS')
+      }
+      break
+    }
+    case 'EcsCredential':
+    case 'Vtc': {
+      const table = n.type === 'Vtc' ? 'vtcs' : 'ecs_credentials'
+      const c = await db(table).where('id', n.id).first()
+      if (c) {
+        if (n.type === 'EcsCredential') push('Did', c.subject_did, 'SUBJECT_OF_CREDENTIAL')
+        push('Participant', c.issuer_participant_id, 'ISSUED_BY')
+        push('Participant', c.participant_id, 'HELD_AS')
+        push('CredentialSchema', c.credential_schema_id, 'BASED_ON_SCHEMA')
+        push('Ecosystem', c.ecosystem_id, 'GOVERNED_BY')
+      }
+      if (n.type === 'Vtc') {
+        const vps = await db('lvp_vtcs').where('vtc_id', n.id).select('lvp_id')
+        for (const v of vps) push('LinkedVerifiablePresentation', v.lvp_id, 'CONTAINS_VTC')
+      }
+      break
+    }
+    case 'LinkedVerifiablePresentation': {
+      const vp = await db('linked_vps').where('id', n.id).first()
+      if (vp) push('Did', vp.did_id, 'REFERENCES_VP')
+      const vtcs = await db('lvp_vtcs').where('lvp_id', n.id).select('vtc_id')
+      for (const v of vtcs) push('Vtc', v.vtc_id, 'CONTAINS_VTC')
+      break
+    }
+    case 'ServiceEndpoint': {
+      const se = await db('service_endpoints').where('id', n.id).first()
+      if (se) push('Did', se.did_id, 'EXPOSES_SERVICE')
       break
     }
     default:
