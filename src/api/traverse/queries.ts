@@ -264,11 +264,11 @@ export async function b1(db: Knex, input: { did: string; credentialId: string })
 // B2 - holder recovery
 export async function b2(db: Knex, input: { did: string; credentialId: string }): Promise<Json> {
   const found = await findCredential(db, input.did, input.credentialId)
-  // participantId 0 marks a self-issued (Pattern A) credential, which has no HOLDER Participant
-  if (found.kind === 'ecs' && found.row.participant_id === 0) {
+  // participantId 0 means no HOLDER Participant (self-issued, or the indexer matched none)
+  if (found.row.participant_id === 0) {
     return {
-      credential: ecsCredentialRef(found.row),
-      subjectDid: found.row.subject_did,
+      credential: found.kind === 'ecs' ? ecsCredentialRef(found.row) : vtcRef(found.row),
+      subjectDid: found.kind === 'ecs' ? found.row.subject_did : input.did,
       holderParticipant: null,
     }
   }

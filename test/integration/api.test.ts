@@ -271,6 +271,20 @@ describe('read APIs against a bootstrapped graph', () => {
       })
     })
 
+    it('B2 returns holderParticipant null for a VTC with no HOLDER participant', async () => {
+      const vtc = db('vtcs').where('id', 'urn:vtc:cert:vs')
+      await vtc.clone().update({ participant_id: 0 })
+      const { status, body } = await traverse('B2', { did: DIDS.vs, credentialId: 'urn:vtc:cert:vs' })
+      await vtc.clone().update({ participant_id: 21 })
+
+      expect(status).toBe(200)
+      expectValidTraverse(body)
+      expect((body as { output: unknown }).output).toMatchObject({
+        subjectDid: DIDS.vs,
+        holderParticipant: null,
+      })
+    })
+
     it('B1 and B2 match a VTC only among the VTCs the did presents', async () => {
       for (const query of ['B1', 'B2']) {
         const { status, body } = await traverse(query, { did: DIDS.issuer, credentialId: 'urn:vtc:cert:vs' })
