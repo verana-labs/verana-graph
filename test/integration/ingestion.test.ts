@@ -193,6 +193,50 @@ describe('ingestion lifecycle', () => {
     })
   })
 
+  it('EcsCredential (subjectDid, id): a second holder of the same id does not take over the row', async () => {
+    await bootstrapped()
+    const snap = structuredClone(vsSnapshot())
+    const [org] = issuerSnapshot().ecsCredentials ?? []
+    if (org) {
+      snap.ecsCredentials?.push({
+        ...org,
+        participantId: 21,
+        credentialSubject: { ...org.credentialSubject, id: DIDS.vs },
+      })
+    }
+    mock.world.snapshots.get(DIDS.vs)?.set(101, snap)
+    mock.pushBlock(block(101, [{ did: DIDS.vs, ecsCredentials: true }]))
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 101)
+    const holders = await db('ecs_credentials')
+      .where('id', 'urn:cred:org:issuer')
+      .orderBy('subject_did')
+      .pluck('subject_did')
+    expect(holders).toEqual([DIDS.issuer, DIDS.vs])
+  })
+
+  it('EcsCredential (subjectDid, id): a same-response duplicate id keeps the OrganizationCredential in any order', async () => {
+    await bootstrapped()
+    const snap = structuredClone(issuerSnapshot())
+    const [org] = snap.ecsCredentials ?? []
+    if (org) {
+      snap.ecsCredentials?.push({
+        ...org,
+        ecsSchema: 'ServiceCredential',
+        credentialSchemaId: 100,
+        issuerParticipantId: 10,
+        credentialSubject: { id: DIDS.issuer, name: 'Acme Issuing', type: 'Issuer' },
+      })
+    }
+    for (const height of [101, 102]) {
+      mock.world.snapshots.get(DIDS.issuer)?.set(height, structuredClone(snap))
+      mock.pushBlock(block(height, [{ did: DIDS.issuer, ecsCredentials: true }]))
+      await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === height)
+      const rows = await db('ecs_credentials').where({ subject_did: DIDS.issuer, id: 'urn:cred:org:issuer' })
+      expect(rows.map(r => r.ecs_schema)).toEqual(['OrganizationCredential'])
+      snap.ecsCredentials?.reverse()
+    }
+  })
+
   it('TG-INGEST-4: trust-only envelopes apply inline without a resolve call', async () => {
     await bootstrapped()
     const before = mock.resolveCalls.length
