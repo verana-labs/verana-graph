@@ -456,6 +456,7 @@ export async function g1(db: Knex, input: { participantId: number }): Promise<Js
 interface PathNode {
   type: string
   id: string | number
+  subjectDid?: string
 }
 
 const MAX_PATH_DEPTH = 12
@@ -473,8 +474,8 @@ const NODE_TABLES: Record<string, [table: string, key: string, integerKey: boole
 }
 
 const CREDENTIAL_TABLES = [
-  ['ecs_credentials', 'EcsCredential'],
-  ['vtcs', 'Vtc'],
+  ['ecs_credentials', 'EcsCredential', ['id', 'subject_did']],
+  ['vtcs', 'Vtc', ['id']],
 ] as const
 
 function live(db: Knex, table: string): Knex.QueryBuilder {
@@ -501,7 +502,9 @@ export async function f1(db: Knex, input: { from: PathNode; to: PathNode }): Pro
   })
   const from = norm(input.from)
   const to = norm(input.to)
-  const key = (n: PathNode) => `${n.type}:${n.id}`
+  const key = (n: PathNode) => `${n.type}:${n.id}:${n.subjectDid ?? ''}`
+  // an EcsCredential is walked as (subjectDid, id) but EntityRef only has room for type and id
+  const ref = ({ type, id }: PathNode): PathNode => ({ type, id })
   const start = { node: from, path: [] as { node: PathNode; edge?: string }[] }
   const target = key(to)
   if (key(from) === target) return [{ node: from }] as unknown as Json
@@ -516,8 +519,8 @@ export async function f1(db: Knex, input: { from: PathNode; to: PathNode }): Pro
         const k = key(node)
         if (visited.has(k)) continue
         visited.add(k)
-        const path = [...item.path, { node: item.node, edge }]
-        if (k === target) return [...path, { node }] as unknown as Json
+        const path = [...item.path, { node: ref(item.node), edge }]
+        if (key(ref(node)) === target) return [...path, { node: ref(node) }] as unknown as Json
         next.push({ node, path })
       }
     }
@@ -528,8 +531,10 @@ export async function f1(db: Knex, input: { from: PathNode; to: PathNode }): Pro
 
 async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edge: string }[]> {
   const out: { node: PathNode; edge: string }[] = []
-  const push = (type: string, id: string | number | null, edge: string) => {
-    if (id !== null && id !== undefined && id !== 0) out.push({ node: { type, id }, edge })
+  const push = (type: string, id: string | number | null, edge: string, subjectDid?: string) => {
+    if (id !== null && id !== undefined && id !== 0) {
+      out.push({ node: subjectDid ? { type, id, subjectDid } : { type, id }, edge })
+    }
   }
   switch (n.type) {
     case 'Did': {
@@ -538,7 +543,7 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
       const parts = await db('participants').where('did_id', n.id).select('id')
       for (const p of parts) push('Participant', p.id, 'PARTICIPATES_IN')
       const creds = await validEcs(db('ecs_credentials').where('subject_did', n.id)).select('id')
-      for (const c of creds) push('EcsCredential', c.id, 'SUBJECT_OF_CREDENTIAL')
+      for (const c of creds) push('EcsCredential', c.id, 'SUBJECT_OF_CREDENTIAL', String(n.id))
       const services = await db('service_endpoints').where('did_id', n.id).select('id')
       for (const s of services) push('ServiceEndpoint', s.id, 'EXPOSES_SERVICE')
       const vps = await db('linked_vps').where('did_id', n.id).select('id')
@@ -560,9 +565,9 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
         push('Corporation', eco.corporation_id, 'CONTROLS')
         for (const s of eco.credential_schema_ids) push('CredentialSchema', Number(s), 'OWNS_SCHEMA')
       }
-      for (const [table, type] of CREDENTIAL_TABLES) {
-        const creds = await live(db, table).where('ecosystem_id', n.id).select('id')
-        for (const c of creds) push(type, c.id, 'GOVERNED_BY')
+      for (const [table, type, cols] of CREDENTIAL_TABLES) {
+        const creds = await live(db, table).where('ecosystem_id', n.id).select(cols)
+        for (const c of creds) push(type, c.id, 'GOVERNED_BY', c.subject_did)
       }
       break
     }
@@ -571,9 +576,9 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
       for (const e of owners) push('Ecosystem', e.id, 'OWNS_SCHEMA')
       const parts = await db('participants').where('credential_schema_id', n.id).select('id')
       for (const p of parts) push('Participant', p.id, 'FOR_SCHEMA')
-      for (const [table, type] of CREDENTIAL_TABLES) {
-        const creds = await live(db, table).where('credential_schema_id', n.id).select('id')
-        for (const c of creds) push(type, c.id, 'BASED_ON_SCHEMA')
+      for (const [table, type, cols] of CREDENTIAL_TABLES) {
+        const creds = await live(db, table).where('credential_schema_id', n.id).select(cols)
+        for (const c of creds) push(type, c.id, 'BASED_ON_SCHEMA', c.subject_did)
       }
       break
     }
@@ -587,18 +592,20 @@ async function neighborsOf(db: Knex, n: PathNode): Promise<{ node: PathNode; edg
       }
       const children = await db('participants').where('validator_participant_id', n.id).select('id')
       for (const c of children) push('Participant', c.id, 'VALIDATED_BY')
-      for (const [table, type] of CREDENTIAL_TABLES) {
-        const issued = await live(db, table).where('issuer_participant_id', n.id).select('id')
-        for (const c of issued) push(type, c.id, 'ISSUED_BY')
-        const held = await live(db, table).where('participant_id', n.id).select('id')
-        for (const c of held) push(type, c.id, 'HELD_AS')
+      for (const [table, type, cols] of CREDENTIAL_TABLES) {
+        const issued = await live(db, table).where('issuer_participant_id', n.id).select(cols)
+        for (const c of issued) push(type, c.id, 'ISSUED_BY', c.subject_did)
+        const held = await live(db, table).where('participant_id', n.id).select(cols)
+        for (const c of held) push(type, c.id, 'HELD_AS', c.subject_did)
       }
       break
     }
     case 'EcsCredential':
     case 'Vtc': {
       const table = n.type === 'Vtc' ? 'vtcs' : 'ecs_credentials'
-      for (const c of await live(db, table).where('id', n.id)) {
+      let rows = live(db, table).where('id', n.id)
+      if (n.subjectDid) rows = rows.where('subject_did', n.subjectDid)
+      for (const c of await rows) {
         if (n.type === 'EcsCredential') push('Did', c.subject_did, 'SUBJECT_OF_CREDENTIAL')
         push('Participant', c.issuer_participant_id, 'ISSUED_BY')
         push('Participant', c.participant_id, 'HELD_AS')
