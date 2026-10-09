@@ -80,20 +80,28 @@ export async function a4(db: Knex, input: { did: string }, page: PageReq): Promi
   if (page.after) vpQ = vpQ.where('id', '>', page.after)
   const raw = await vpQ.orderBy('id').limit(page.limit + 1)
   const { rows: vps, nextCursor } = takePage(raw, page, r => String(r.id))
-  const out: Json[] = []
-  for (const vp of vps) {
-    const vtcs = await db('vtcs as v')
-      .join('lvp_vtcs as lv', 'lv.vtc_id', 'v.id')
-      .where('lv.lvp_id', vp.id)
-      .select<VtcRow[]>('v.*')
-      .orderBy('v.id')
-    out.push({
-      id: vp.id,
-      serviceId: vp.service_id,
-      lastObservedAtTime: vp.last_observed_at_time.toISOString(),
-      vtcs: vtcs.map(vtcRef),
-    })
+  const vtcs = vps.length
+    ? await db('vtcs as v')
+        .join('lvp_vtcs as lv', 'lv.vtc_id', 'v.id')
+        .whereIn(
+          'lv.lvp_id',
+          vps.map(vp => vp.id),
+        )
+        .select<(VtcRow & { lvp_id: string })[]>('v.*', 'lv.lvp_id')
+        .orderBy('v.id')
+    : []
+  const vtcsByVp = new Map<string, VtcRow[]>()
+  for (const v of vtcs) {
+    const list = vtcsByVp.get(v.lvp_id) ?? []
+    list.push(v)
+    vtcsByVp.set(v.lvp_id, list)
   }
+  const out: Json[] = vps.map(vp => ({
+    id: vp.id,
+    serviceId: vp.service_id,
+    lastObservedAtTime: vp.last_observed_at_time.toISOString(),
+    vtcs: (vtcsByVp.get(vp.id) ?? []).map(vtcRef),
+  }))
   return { output: out, nextCursor }
 }
 
@@ -104,6 +112,39 @@ async function enrich(db: Knex, schemaId: number, ecosystemId: number): Promise<
   return {
     schema: schema ? schemaRef(schema) : { id: schemaId },
     ecosystem: ecosystem ? ecosystemRef(ecosystem) : { id: ecosystemId },
+  }
+}
+
+async function byId<T extends { id: number }>(
+  db: Knex,
+  table: string,
+  ids: number[],
+): Promise<Map<number, T>> {
+  if (ids.length === 0) return new Map()
+  const rows: T[] = await db(table).whereIn('id', [...new Set(ids)])
+  return new Map(rows.map(r => [r.id, r]))
+}
+
+type SchemaScoped = { credential_schema_id: number; ecosystem_id: number }
+
+async function enrichPage(db: Knex, rows: SchemaScoped[]): Promise<(row: SchemaScoped) => Json> {
+  const schemas = await byId<Parameters<typeof schemaRef>[0]>(
+    db,
+    'credential_schemas',
+    rows.map(r => r.credential_schema_id),
+  )
+  const ecosystems = await byId<Parameters<typeof ecosystemRef>[0]>(
+    db,
+    'ecosystems',
+    rows.map(r => r.ecosystem_id),
+  )
+  return r => {
+    const schema = schemas.get(r.credential_schema_id)
+    const ecosystem = ecosystems.get(r.ecosystem_id)
+    return {
+      schema: schema ? schemaRef(schema) : { id: r.credential_schema_id },
+      ecosystem: ecosystem ? ecosystemRef(ecosystem) : { id: r.ecosystem_id },
+    }
   }
 }
 
@@ -122,15 +163,16 @@ export async function a5(
     .limit(page.limit + 1)
     .select<EcsCredentialRow[]>()
   const { rows: creds, nextCursor } = takePage(raw, page, r => r.id)
+  const refs = await enrichPage(db, creds)
+  const issuers = await byId<ParticipantRow>(
+    db,
+    'participants',
+    creds.map(c => c.issuer_participant_id),
+  )
   const out: Json[] = []
   for (const c of creds) {
-    const item: Json = {
-      credential: ecsCredentialRef(c),
-      ...(await enrich(db, c.credential_schema_id, c.ecosystem_id)),
-    }
-    const issuer = await db('participants')
-      .where('id', c.issuer_participant_id)
-      .first<ParticipantRow | undefined>()
+    const item: Json = { credential: ecsCredentialRef(c), ...refs(c) }
+    const issuer = issuers.get(c.issuer_participant_id)
     if (issuer) {
       item.issuerDid = issuer.did_id
       item.issuerParticipant = participantRef(issuer)
@@ -187,19 +229,23 @@ export async function a6(
   const vtcQ = input.ecsSchema ? null : db('vtcs').whereIn('issuer_participant_id', issuerIds)
   const { ecs, vtcs, nextCursor } = await fetchDualPage(ecsQ, vtcQ, page)
 
+  const refs = await enrichPage(db, [...ecs, ...vtcs])
+  const holders = await byId<ParticipantRow>(
+    db,
+    'participants',
+    vtcs.map(v => v.participant_id),
+  )
   const ecsItems: Json[] = []
   for (const c of ecs) {
-    const refs = await enrich(db, c.credential_schema_id, c.ecosystem_id)
-    ecsItems.push({ credential: ecsCredentialRef(c), subjectDid: c.subject_did, ...refs })
+    ecsItems.push({ credential: ecsCredentialRef(c), subjectDid: c.subject_did, ...refs(c) })
   }
   const vtcItems: Json[] = []
   for (const v of vtcs) {
-    const refs = await enrich(db, v.credential_schema_id, v.ecosystem_id)
-    const holder = await db('participants').where('id', v.participant_id).first<ParticipantRow | undefined>()
+    const holder = holders.get(v.participant_id)
     vtcItems.push({
       credential: vtcRef(v),
       ...(holder ? { subjectDid: holder.did_id } : {}),
-      ...refs,
+      ...refs(v),
     })
   }
   return { output: { ecsCredentials: ecsItems, vtcs: vtcItems }, nextCursor }
@@ -216,14 +262,8 @@ export async function a7(db: Knex, input: { did: string; role?: string }, page: 
     .limit(page.limit + 1)
     .select<ParticipantRow[]>()
   const { rows, nextCursor } = takePage(raw, page, r => String(r.id))
-  const out: Json[] = []
-  for (const p of rows) {
-    out.push({
-      participant: participantRef(p),
-      ...(await enrich(db, p.credential_schema_id, p.ecosystem_id)),
-    })
-  }
-  return { output: out, nextCursor }
+  const refs = await enrichPage(db, rows)
+  return { output: rows.map(p => ({ participant: participantRef(p), ...refs(p) })), nextCursor }
 }
 
 async function findCredential(
