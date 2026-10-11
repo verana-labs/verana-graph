@@ -7,6 +7,7 @@ state of every indexed DID into a typed graph and exposes three public surfaces:
 - `POST /v4/graph/traverse`: the 19 canonical traversal queries (A1-G1)
 - `POST /v4/graph/search`: hybrid faceted search over 5 entity surfaces
 - `WS /v4/graph/blocks/subscribe`: block-progress notifications (one per committed block)
+- `GET /docs`: Swagger UI; `GET /docs/openapi.json`: the OpenAPI document, also committed at [`docs/api/openapi.json`](./docs/api/openapi.json) (`pnpm openapi:export`, checked in CI)
 
 Stack: TypeScript, Fastify, `ws`, Knex + PostgreSQL. No ORM, no queue, one database serving both
 the traversal and search projections.
