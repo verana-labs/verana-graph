@@ -12,6 +12,7 @@ import * as m0009 from './migrations/0009_did_text_and_vtc_subject'
 import * as m0010 from './migrations/0010_schema_load_retries'
 import * as m0011 from './migrations/0011_freetext_tokens'
 import * as m0012 from './migrations/0012_ecs_valid_until_and_prefix_indexes'
+import * as m0013 from './migrations/0013_ecs_credential_holder_key'
 
 // int8 (block heights, VPR ids) parsed as Number: practical uint64 values in this domain fit
 // well below 2^53. numeric (coin amounts) stays a string.
@@ -32,6 +33,7 @@ const MIGRATIONS: Record<string, Knex.Migration> = {
   '0010_schema_load_retries.ts': m0010,
   '0011_freetext_tokens.ts': m0011,
   '0012_ecs_valid_until_and_prefix_indexes.ts': m0012,
+  '0013_ecs_credential_holder_key.ts': m0013,
 }
 
 export function createDb(databaseUrl: string): Knex {
