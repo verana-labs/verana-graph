@@ -12,9 +12,9 @@ describe('cursor', () => {
   it('round-trips and binds to its query', () => {
     const hash = queryHash({ surface: 'Did', freeText: 'x' })
     const c = encodeCursor(1.5, 'did:a', hash)
-    expect(decodeCursor(c, hash)).toMatchObject({ s: 1.5, k: 'did:a' })
-    expect(() => decodeCursor(c, queryHash({ surface: 'Ecosystem' }))).toThrowError(ApiError)
-    expect(() => decodeCursor('garbage!', hash)).toThrowError(ApiError)
+    expect(decodeCursor(c, hash, 'text')).toMatchObject({ s: 1.5, k: 'did:a' })
+    expect(() => decodeCursor(c, queryHash({ surface: 'Ecosystem' }), 'text')).toThrowError(ApiError)
+    expect(() => decodeCursor('garbage!', hash, 'text')).toThrowError(ApiError)
   })
 
   it('hash ignores limit and cursor but not filters', () => {

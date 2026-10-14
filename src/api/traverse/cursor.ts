@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { ApiError } from '../errors'
-import { stableStringify } from '../search/cursor'
+import { isValidKey, type KeyType, stableStringify } from '../search/cursor'
 
 const DEFAULT_LIMIT = 100
 
@@ -18,7 +18,11 @@ function encodeKey(key: string, hash: string): string {
   return Buffer.from(JSON.stringify({ k: key, h: hash })).toString('base64url')
 }
 
-export function decodeKey(cursor: string | undefined, hash: string): string | null {
+export function decodeKey(
+  cursor: string | undefined,
+  hash: string,
+  keyType: KeyType | 'dual',
+): string | null {
   if (cursor === undefined) return null
   let payload: unknown
   try {
@@ -32,6 +36,9 @@ export function decodeKey(cursor: string | undefined, hash: string): string | nu
   const { k, h } = payload as { k?: unknown; h?: unknown }
   if (typeof k !== 'string' || h !== hash) {
     throw new ApiError('INVALID_CURSOR', 'cursor does not belong to this query')
+  }
+  if (keyType !== 'dual' && !isValidKey(k, keyType)) {
+    throw new ApiError('INVALID_CURSOR', 'cursor key is not valid for this query')
   }
   return k
 }

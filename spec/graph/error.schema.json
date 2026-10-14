@@ -13,7 +13,7 @@
       "required": ["code", "message"],
       "properties": {
         "code": {
-          "enum": ["INVALID_INPUT", "UNKNOWN_QUERY", "UNKNOWN_FILTER_FIELD", "INVALID_CURSOR", "UNKNOWN_ID"],
+          "enum": ["INVALID_INPUT", "UNKNOWN_QUERY", "UNKNOWN_FILTER_FIELD", "INVALID_CURSOR", "UNKNOWN_ID", "INTERNAL"],
           "description": "Machine-readable error class per [TG-ERR-1] — the only field programmatic consumers need."
         },
         "message": {

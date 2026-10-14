@@ -6,8 +6,10 @@ import { Knex } from 'knex'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { WebSocket } from 'ws'
 import { registerDocs } from '../../src/api/docs'
-import { ApiError } from '../../src/api/errors'
+import { apiErrorHandler } from '../../src/api/errors'
+import { queryHash } from '../../src/api/search/cursor'
 import { registerSearchRoute } from '../../src/api/search/route'
+import { pageHash } from '../../src/api/traverse/cursor'
 import { registerTraverseRoute } from '../../src/api/traverse/route'
 import { attachBlockProgressServer } from '../../src/bps/server'
 import { Dereferencer } from '../../src/deref/deref'
@@ -28,6 +30,7 @@ const ajv = new Ajv({ strict: false })
 addFormats.default(ajv as never)
 const validateTraverse = ajv.compile(loadSchema('traverse.response.schema.json'))
 const validateSearch = ajv.compile(loadSchema('search.response.schema.json'))
+const validateError = ajv.compile(loadSchema('error.schema.json'))
 
 describe('read APIs against a bootstrapped graph', () => {
   let db: Knex
@@ -52,10 +55,7 @@ describe('read APIs against a bootstrapped graph', () => {
     })
 
     app = Fastify({ logger: false })
-    app.setErrorHandler((err: unknown, _req, reply) => {
-      if (err instanceof ApiError) return reply.status(err.httpStatus).send(err.toBody())
-      throw err
-    })
+    app.setErrorHandler(apiErrorHandler(() => {}))
     registerTraverseRoute(app, db)
     registerSearchRoute(app, db)
     registerDocs(app)
@@ -293,21 +293,61 @@ describe('read APIs against a bootstrapped graph', () => {
     })
 
     it('TG-ERR-1: unknown ids return UNKNOWN_ID with 404', async () => {
-      const { status, body } = await traverse('A1', { did: 'did:mock:nope' })
-      expect(status).toBe(404)
-      expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_ID')
+      for (const [query, input] of [
+        ['A1', { did: 'did:mock:nope' }],
+        ['C1', { ecosystemId: 1e19 }],
+        ['C1', { ecosystemId: 2 ** 63 }],
+        ['E1', { corporationId: 1e30 }],
+        ['G1', { participantId: 1e19 }],
+      ] as const) {
+        const { status, body } = await traverse(query, input)
+        expect(status, JSON.stringify(input)).toBe(404)
+        expect(validateError(body)).toBe(true)
+        expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_ID')
+      }
     })
 
     it('TG-ERR-1: a malformed input returns INVALID_INPUT with 400', async () => {
-      const { status, body } = await traverse('A1', { nope: true })
-      expect(status).toBe(400)
-      expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
+      for (const [query, input] of [
+        ['A1', { nope: true }],
+        ['A1', { did: 'did:\u0000' }],
+        ['B1', { did: DIDS.vs, credentialId: 'x\u0000' }],
+        ['F1', { from: { type: 'Did', id: 'did:\u0000' }, to: { type: 'Ecosystem', id: 7 } }],
+        ['F1', { from: { type: 'Did', id: DIDS.vs }, to: { type: 'Vtc', id: 'x\u0000' } }],
+      ] as const) {
+        const { status, body } = await traverse(query, input)
+        expect(status, JSON.stringify(input)).toBe(400)
+        expect(validateError(body)).toBe(true)
+        expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
+      }
     })
 
     it('TG-ERR-1: an unknown query selector returns UNKNOWN_QUERY with 400', async () => {
-      const { status, body } = await traverse('ZZ', { did: DIDS.vs })
-      expect(status).toBe(400)
-      expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_QUERY')
+      for (const query of ['ZZ', 'toString', '__proto__']) {
+        const { status, body } = await traverse(query, { did: DIDS.vs })
+        expect(status, query).toBe(400)
+        expect((body as { error: { code: string } }).error.code).toBe('UNKNOWN_QUERY')
+      }
+    })
+
+    it('TG-ERR-1: a cursor with a forged key returns INVALID_CURSOR with 400', async () => {
+      const forge = (payload: object) => Buffer.from(JSON.stringify(payload)).toString('base64url')
+      const did = { did: DIDS.vs }
+      for (const { status, body } of [
+        await search({
+          surface: 'Ecosystem',
+          cursor: forge({ s: 0, k: 'abc', h: queryHash({ surface: 'Ecosystem' }) }),
+        }),
+        await search({
+          surface: 'Did',
+          cursor: forge({ s: 0, k: '\u0000', h: queryHash({ surface: 'Did' }) }),
+        }),
+        await traverse('A7', did, { cursor: forge({ k: '1e400', h: pageHash('A7', did) }) }),
+        await traverse('A4', did, { cursor: forge({ k: '\u0000', h: pageHash('A4', did) }) }),
+      ]) {
+        expect(status).toBe(400)
+        expect((body as { error: { code: string } }).error.code).toBe('INVALID_CURSOR')
+      }
     })
 
     it('TG-ERR-1: an unknown filter field returns UNKNOWN_FILTER_FIELD with 400', async () => {
@@ -323,6 +363,63 @@ describe('read APIs against a bootstrapped graph', () => {
       })
       expect(status).toBe(400)
       expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
+    })
+
+    it('TG-ERR-1: a filter value of the wrong type or a NUL character returns INVALID_INPUT with 400, never a 500', async () => {
+      for (const [surface, filters] of [
+        ['Did', { 'Did.corporationId': 'abc' }],
+        ['Did', { 'Participant.ecosystemId': 'x' }],
+        ['Did', { 'Did.isCorporation': 1 }],
+        ['Did', { 'Did.isEcosystem': 'true' }],
+        ['Did', { 'Did.pattern': 'A\u0000' }],
+        ['Ecosystem', { archived: 'yes' }],
+        ['Ecosystem', { issuedCredentials: { range: { gte: 'abc' } } }],
+        ['Corporation', { deposit: { range: { gte: '40000000uvna' } } }],
+        ['Did', { 'EcsCredential.ServiceCredential.minimumAgeRequired': { range: { lte: 3000000000 } } }],
+        ['Corporation', { lastSlashedAtTime: { range: { gte: '2026-02-30T00:00:00Z' } } }],
+        ['Corporation', { lastSlashedAtTime: { range: { gte: '0000-01-01T00:00:00Z' } } }],
+        ['CredentialSchema', { archived: 1 }],
+      ] as const) {
+        const { status, body } = await search({ surface, filters })
+        expect(status, JSON.stringify(filters)).toBe(400)
+        expect(validateError(body)).toBe(true)
+        expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
+      }
+      expect((await search({ surface: 'Did', freeText: 'a\u0000' })).status).toBe(400)
+      for (const [surface, filters] of [
+        ['Did', { 'Did.corporationId': '42' }],
+        ['Corporation', { deposit: { range: { lte: '100000000000000000000' } } }],
+      ] as const) {
+        const { status } = await search({ surface, filters })
+        expect(status, JSON.stringify(filters)).toBe(200)
+      }
+    })
+
+    it('TG-ERR-1: unparseable bodies and non-POST methods return INVALID_INPUT with 400', async () => {
+      const json = { 'content-type': 'application/json' }
+      const responses = await Promise.all([
+        app.inject({
+          method: 'POST',
+          url: '/v4/graph/search',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          payload: '{"surface":"Did"}',
+        }),
+        app.inject({ method: 'POST', url: '/v4/graph/traverse', headers: json, payload: '{"query":' }),
+        app.inject({
+          method: 'POST',
+          url: '/v4/graph/search',
+          headers: json,
+          payload: JSON.stringify({ surface: 'Did', freeText: 'x'.repeat(2_000_000) }),
+        }),
+        app.inject({ method: 'GET', url: '/v4/graph/search' }),
+        app.inject({ method: 'DELETE', url: '/v4/graph/traverse' }),
+      ])
+      for (const res of responses) {
+        const body = res.json()
+        expect(res.statusCode).toBe(400)
+        expect(validateError(body)).toBe(true)
+        expect((body as { error: { code: string } }).error.code).toBe('INVALID_INPUT')
+      }
     })
   })
 
