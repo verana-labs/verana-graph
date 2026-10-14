@@ -19,7 +19,7 @@
     "/v4/graph/search": {
       "post": {
         "summary": "Search a surface (TG-FCT-3, ranked, trusted-only by default)",
-        "description": "Ranked search over one surface of the graph. Trusted-only by default (TG-FCT-3), pass includeUntrusted to widen.\n\n**surface** (required): `Did`, `Ecosystem`, `Corporation`, `CredentialSchema`, `ServiceEndpoint`\n\n**freeText**: ranked full-text match on the surface.\n\n**filters**: object keyed by field. A bare scalar means equals, an array means any-of, or pass an operator object (`eq`, `in`, `prefix`, `range`, `contains`, `containsAny`). Fields on the Did surface: `Did.trusted`, `Did.pattern`, `Did.serviceTypes`, `Did.corporationId`, `Did.isCorporation`, `Did.isEcosystem`, `Did.ecosystemIds`, `Did.operatorKind`, `Did.operatorName`, `EcsCredential.ServiceCredential.type`, `EcsCredential.ServiceCredential.minimumAgeRequired`, `OrganizationCredential.countryCode`, `OrganizationCredential.legalJurisdiction`, `OrganizationCredential.organizationKind`, `OrganizationCredential.lei`, `OrganizationCredential.registryId`, `PersonaCredential.controllerCountryCode`, `PersonaCredential.controllerJurisdiction`, `Participant.ecosystemId`, `Participant.credentialSchemaId`, `Participant.role`. `Did.serviceTypes` and `Did.ecosystemIds` take `contains` or `containsAny` only. An unknown field returns `UNKNOWN_FILTER_FIELD`.\n\n**facets**: the response carries one aggregation per `eq` or `in` filter in the request plus a default set per surface (TG-FCT-6). Did: `Did.operatorKind`, `EcsCredential.ServiceCredential.type`, `OrganizationCredential.countryCode`. Ecosystem: `archived`, `corporationId`. CredentialSchema: `archived`, `ecosystemId`. ServiceEndpoint: `type`. Corporation has none.\n\n**snippet**: object of group name to boolean, checked against the queried surface (an unknown name or a group of another surface is `INVALID_INPUT`). Omit it for the default set, pass `{}` for the core alone (TG-FCT-6c). Every hit always carries the core of TG-FCT-6a: Did `did`, `lastObservedAtTime`, `isTrustExpired`, `trusted`, `isCorporation`, `isEcosystem`. Ecosystem `id`, `did`, `archived`, `lastObservedAtTime`. Corporation `id`, `did`, `lastObservedAtTime`. CredentialSchema `id`, `archived`, `lastObservedAtTime`. ServiceEndpoint `id`, `didId`, `type`, `serviceEndpoint`, `lastObservedAtTime`. Groups per surface (TG-FCT-6b), default set first, then opt-in. Did: `service`, `operator`, `corporation`, `endpoints`, then `ecosystems`, `participations`, `credentials`. Ecosystem: `corporation`, `stats`, `didCard`, then `governance`, `schemas`. Corporation: `trust`, `didCard`, then `governance`, `ecosystems`, `dids`. CredentialSchema: `schema`, `ecosystem`, then `stats`, `body`. ServiceEndpoint: `didCard`. List groups cap `entries` at 100, the counters next to them are never capped.\n\n**limit**: 1..200, default 20. **cursor**: opaque keyset cursor from the previous page, `cursor` in the response is null on the last page (TG-FCT-7). The selector never changes the result set, so a cursor stays valid when `snippet` changes between pages.",
+        "description": "Ranked search over one surface of the graph. Trusted-only by default (TG-FCT-3), pass includeUntrusted to widen.\n\n**surface** (required): `Did`, `Ecosystem`, `Corporation`, `CredentialSchema`, `ServiceEndpoint`\n\n**freeText**: ranked full-text match on the surface. The text splits on whitespace and punctuation and every token must match a whole word, case-insensitive, with no operators (TG-FCT-4a).\n\n**filters**: object keyed by field. A bare scalar means equals, an array means any-of, or pass an operator object (`eq`, `in`, `prefix`, `range`, `contains`, `containsAny`). Fields on the Did surface: `Did.trusted`, `Did.pattern`, `Did.serviceTypes`, `Did.corporationId`, `Did.isCorporation`, `Did.isEcosystem`, `Did.ecosystemIds`, `Did.operatorKind`, `Did.operatorName`, `EcsCredential.ServiceCredential.type`, `EcsCredential.ServiceCredential.minimumAgeRequired`, `OrganizationCredential.countryCode`, `OrganizationCredential.legalJurisdiction`, `OrganizationCredential.organizationKind`, `OrganizationCredential.lei`, `OrganizationCredential.registryId`, `PersonaCredential.controllerCountryCode`, `PersonaCredential.controllerJurisdiction`, `Participant.ecosystemId`, `Participant.credentialSchemaId`, `Participant.role`. `Did.serviceTypes` and `Did.ecosystemIds` take `contains` or `containsAny` only. An unknown field returns `UNKNOWN_FILTER_FIELD`. A value of the wrong type for its field returns `INVALID_INPUT` (booleans are JSON `true` or `false`, ids, counts and `deposit` are non-negative integers given as a JSON number or a digit string, times are ISO 8601 date-times).\n\n**facets**: the response carries one aggregation per `eq` or `in` filter in the request plus a default set per surface (TG-FCT-6). Did: `Did.operatorKind`, `EcsCredential.ServiceCredential.type`, `OrganizationCredential.countryCode`. Ecosystem: `archived`, `corporationId`. CredentialSchema: `archived`, `ecosystemId`. ServiceEndpoint: `type`. Corporation has none.\n\n**snippet**: object of group name to boolean, checked against the queried surface (an unknown name or a group of another surface is `INVALID_INPUT`). Omit it for the default set, pass `{}` for the core alone (TG-FCT-6c). Every hit always carries the core of TG-FCT-6a: Did `did`, `lastObservedAtTime`, `isTrustExpired`, `trusted`, `isCorporation`, `isEcosystem`. Ecosystem `id`, `did`, `archived`, `lastObservedAtTime`. Corporation `id`, `did`, `lastObservedAtTime`. CredentialSchema `id`, `archived`, `lastObservedAtTime`. ServiceEndpoint `id`, `didId`, `type`, `serviceEndpoint`, `lastObservedAtTime`. Groups per surface (TG-FCT-6b), default set first, then opt-in. Did: `service`, `operator`, `corporation`, `endpoints`, then `ecosystems`, `participations`, `credentials`. Ecosystem: `corporation`, `stats`, `didCard`, then `governance`, `schemas`. Corporation: `trust`, `didCard`, then `governance`, `ecosystems`, `dids`. CredentialSchema: `schema`, `ecosystem`, then `stats`, `body`. ServiceEndpoint: `didCard`. List groups cap `entries` at 100, the counters next to them are never capped. In the Did `ecosystems` group and the Ecosystem `schemas` group a schema whose record is not loaded yet comes back as `{ id }` (TG-FCT-6b).\n\n**limit**: 1..200, default 20. **cursor**: opaque keyset cursor from the previous page, `cursor` in the response is null on the last page (TG-FCT-7). The selector never changes the result set, so a cursor stays valid when `snippet` changes between pages.",
         "requestBody": {
           "required": true,
           "content": {
@@ -266,7 +266,84 @@
                             "UNKNOWN_QUERY",
                             "UNKNOWN_FILTER_FIELD",
                             "INVALID_CURSOR",
-                            "UNKNOWN_ID"
+                            "UNKNOWN_ID",
+                            "INTERNAL"
+                          ],
+                          "description": "Machine-readable error class per [TG-ERR-1] — the only field programmatic consumers need."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Human-readable detail. Implementation-defined wording; MUST NOT be required for programmatic dispatch."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "TG-ERR-1 error envelope, UNKNOWN_ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "GraphErrorResponse",
+                  "description": "Shared error envelope for the Verana Graph traversal and faceted-search APIs, per [TG-ERR-1]. Every non-2xx response of either API MUST validate against this schema.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["error"],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["code", "message"],
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INVALID_INPUT",
+                            "UNKNOWN_QUERY",
+                            "UNKNOWN_FILTER_FIELD",
+                            "INVALID_CURSOR",
+                            "UNKNOWN_ID",
+                            "INTERNAL"
+                          ],
+                          "description": "Machine-readable error class per [TG-ERR-1] — the only field programmatic consumers need."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Human-readable detail. Implementation-defined wording; MUST NOT be required for programmatic dispatch."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "TG-ERR-1 error envelope, INTERNAL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "GraphErrorResponse",
+                  "description": "Shared error envelope for the Verana Graph traversal and faceted-search APIs, per [TG-ERR-1]. Every non-2xx response of either API MUST validate against this schema.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["error"],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["code", "message"],
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INVALID_INPUT",
+                            "UNKNOWN_QUERY",
+                            "UNKNOWN_FILTER_FIELD",
+                            "INVALID_CURSOR",
+                            "UNKNOWN_ID",
+                            "INTERNAL"
                           ],
                           "description": "Machine-readable error class per [TG-ERR-1] — the only field programmatic consumers need."
                         },
@@ -287,7 +364,7 @@
     "/v4/graph/traverse": {
       "post": {
         "summary": "Traversal queries A1..G1 (TG-QRY-5 single binding)",
-        "description": "One endpoint, nineteen canonical queries (TG-QRY-3). Set `query` and give the matching `input`:\n\n| query | returns | input (bold = required) |\n|---|---|---|\n| A1 | trust summary of a DID | **did** |\n| A2 | governing chain: corporation + ecosystems | **did** |\n| A3 | service endpoints | **did** |\n| A4 | linked VPs and contained VTCs | **did** |\n| A5 | credentials the DID holds | **did**, ecsSchema |\n| A6 | credentials the DID issued | **did**, ecsSchema |\n| A7 | participants of the DID by role | **did**, role |\n| B1 | issuer recovery for a credential | **did**, **credentialId** |\n| B2 | holder recovery for a credential | **did**, **credentialId** |\n| C1 | schemas owned by an ecosystem | **ecosystemId** |\n| C2 | participating DIDs grouped by role | **ecosystemId**, role, credentialSchemaId |\n| C3 | ecosystem governance summary | **ecosystemId** |\n| D1 | credentials based on a schema | **credentialSchemaId** |\n| D2 | participating DIDs of a schema | **credentialSchemaId**, role |\n| E1 | DIDs operated by a corporation | **corporationId** |\n| E2 | ecosystems controlled by a corporation | **corporationId** |\n| E3 | corporation governance summary | **corporationId** |\n| F1 | path between two entities | **from**, **to** (EntityRef) |\n| G1 | validator chain, root to leaf | **participantId** |\n\n`role`: HOLDER, ISSUER, VERIFIER, ISSUER_GRANTOR, VERIFIER_GRANTOR, ECOSYSTEM. `ecsSchema`: ServiceCredential, OrganizationCredential, PersonaCredential, UserAgentCredential. `EntityRef`: `{type, id}` with type one of Did, Corporation, Ecosystem, CredentialSchema, Participant, EcsCredential, Vtc, LinkedVerifiablePresentation, ServiceEndpoint.\n\nCollection queries take `limit` (1..500, default 100) and `cursor`. Non-ACTIVE participants appear in traversal with their true state while referenced (TG-ACT-1), search never returns them.\n\nErrors (TG-ERR-1 envelope): `INVALID_INPUT`, `UNKNOWN_QUERY`, `UNKNOWN_ID`, `UNKNOWN_FILTER_FIELD`, `INVALID_CURSOR`.",
+        "description": "One endpoint, nineteen canonical queries (TG-QRY-3). Set `query` and give the matching `input`:\n\n| query | returns | input (bold = required) |\n|---|---|---|\n| A1 | trust summary of a DID | **did** |\n| A2 | governing chain: corporation + ecosystems | **did** |\n| A3 | service endpoints | **did** |\n| A4 | linked VPs and contained VTCs | **did** |\n| A5 | credentials the DID holds | **did**, ecsSchema |\n| A6 | credentials the DID issued | **did**, ecsSchema |\n| A7 | participants of the DID by role | **did**, role |\n| B1 | issuer recovery for a credential | **did**, **credentialId** |\n| B2 | holder recovery for a credential | **did**, **credentialId** |\n| C1 | schemas owned by an ecosystem | **ecosystemId** |\n| C2 | participating DIDs grouped by role | **ecosystemId**, role, credentialSchemaId |\n| C3 | ecosystem governance summary | **ecosystemId** |\n| D1 | credentials based on a schema | **credentialSchemaId** |\n| D2 | participating DIDs of a schema | **credentialSchemaId**, role |\n| E1 | DIDs operated by a corporation | **corporationId** |\n| E2 | ecosystems controlled by a corporation | **corporationId** |\n| E3 | corporation governance summary | **corporationId** |\n| F1 | path between two entities | **from**, **to** (EntityRef) |\n| G1 | validator chain, root to leaf | **participantId** |\n\n`role`: HOLDER, ISSUER, VERIFIER, ISSUER_GRANTOR, VERIFIER_GRANTOR, ECOSYSTEM. `ecsSchema`: ServiceCredential, OrganizationCredential, PersonaCredential, UserAgentCredential. `EntityRef`: `{type, id}` with type one of Did, Corporation, Ecosystem, CredentialSchema, Participant, EcsCredential, Vtc, LinkedVerifiablePresentation, ServiceEndpoint.\n\nCollection queries take `limit` (1..500, default 100) and `cursor`. Non-ACTIVE participants appear in traversal with their true state while referenced (TG-ACT-1), search never returns them.\n\nIn A2, A5, A6, A7 and B1 a corporation, schema or ecosystem whose record is not loaded yet comes back as `{ id }` (TG-QRY-3).\n\nErrors (TG-ERR-1 envelope): `INVALID_INPUT`, `UNKNOWN_QUERY`, `UNKNOWN_ID`, `UNKNOWN_FILTER_FIELD`, `INVALID_CURSOR`, `INTERNAL` (500).",
         "requestBody": {
           "required": true,
           "content": {
@@ -665,7 +742,7 @@
               "application/json": {
                 "schema": {
                   "title": "TraverseResponse",
-                  "description": "Response payload for the verana-graph canonical traversal queries [TG-QRY-3]. The single endpoint `POST /v4/graph/traverse` returns a per-query `output` shape mirroring the **Output (shape)** column of the [TG-QRY-3] tables. Every entity reference carries its primary key, `lastObservedAtTime`, and the visibility flags applicable to its type (`isTrustExpired` for `Did`, `archived` for `Ecosystem` / `CredentialSchema`). All datetime values are ISO 8601 / RFC 3339 UTC strings (see `#/$defs/Iso8601DateTime`). See `### Traversal REST binding` in the verana-graph spec.",
+                  "description": "Response payload for the verana-graph canonical traversal queries [TG-QRY-3]. The single endpoint `POST /v4/graph/traverse` returns a per-query `output` shape mirroring the **Output (shape)** column of the [TG-QRY-3] tables. Every entity reference other than an `IdOnlyRef` carries its primary key, `lastObservedAtTime`, and the visibility flags applicable to its type (`isTrustExpired` for `Did`, `archived` for `Ecosystem` / `CredentialSchema`). All datetime values are ISO 8601 / RFC 3339 UTC strings (see `#/$defs/Iso8601DateTime`). See `### Traversal REST binding` in the verana-graph spec.",
                   "type": "object",
                   "additionalProperties": false,
                   "required": ["query", "evaluatedAtTime", "output"],
@@ -1017,7 +1094,84 @@
                             "UNKNOWN_QUERY",
                             "UNKNOWN_FILTER_FIELD",
                             "INVALID_CURSOR",
-                            "UNKNOWN_ID"
+                            "UNKNOWN_ID",
+                            "INTERNAL"
+                          ],
+                          "description": "Machine-readable error class per [TG-ERR-1] — the only field programmatic consumers need."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Human-readable detail. Implementation-defined wording; MUST NOT be required for programmatic dispatch."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "TG-ERR-1 error envelope, UNKNOWN_ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "GraphErrorResponse",
+                  "description": "Shared error envelope for the Verana Graph traversal and faceted-search APIs, per [TG-ERR-1]. Every non-2xx response of either API MUST validate against this schema.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["error"],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["code", "message"],
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INVALID_INPUT",
+                            "UNKNOWN_QUERY",
+                            "UNKNOWN_FILTER_FIELD",
+                            "INVALID_CURSOR",
+                            "UNKNOWN_ID",
+                            "INTERNAL"
+                          ],
+                          "description": "Machine-readable error class per [TG-ERR-1] — the only field programmatic consumers need."
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Human-readable detail. Implementation-defined wording; MUST NOT be required for programmatic dispatch."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "TG-ERR-1 error envelope, INTERNAL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "GraphErrorResponse",
+                  "description": "Shared error envelope for the Verana Graph traversal and faceted-search APIs, per [TG-ERR-1]. Every non-2xx response of either API MUST validate against this schema.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["error"],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["code", "message"],
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "INVALID_INPUT",
+                            "UNKNOWN_QUERY",
+                            "UNKNOWN_FILTER_FIELD",
+                            "INVALID_CURSOR",
+                            "UNKNOWN_ID",
+                            "INTERNAL"
                           ],
                           "description": "Machine-readable error class per [TG-ERR-1] — the only field programmatic consumers need."
                         },
@@ -1614,9 +1768,24 @@
               },
               {
                 "type": "object"
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    {
+                      "type": "object"
+                    }
+                  ]
+                }
               }
             ],
-            "description": "Endpoint value preserved verbatim per DID-CORE (URI string or object)."
+            "description": "Endpoint value preserved verbatim per DID-CORE (URI string, object, or array of these)."
           }
         }
       },
@@ -1656,7 +1825,14 @@
             "type": "array",
             "description": "One entry per member of `Ecosystem.credentialSchemaIds[]`; `[]` when the Ecosystem owns no schema.",
             "items": {
-              "$ref": "#/components/schemas/search_response_SchemaRef"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/search_response_SchemaRef"
+                },
+                {
+                  "$ref": "#/components/schemas/search_response_IdOnlyRef"
+                }
+              ]
             }
           }
         }
@@ -1779,6 +1955,18 @@
           "participants": {
             "$ref": "#/components/schemas/search_response_RoleCountMap",
             "description": "`CredentialSchema.participants` — the schema's per-role participant counts."
+          }
+        }
+      },
+      "search_response_IdOnlyRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "description": "Reference to a `CredentialSchema` record that is not yet materialised, per [TG-FCT-6b].",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },
@@ -1925,7 +2113,14 @@
           "schemas": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/search_response_SchemaRef"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/search_response_SchemaRef"
+                },
+                {
+                  "$ref": "#/components/schemas/search_response_IdOnlyRef"
+                }
+              ]
             },
             "description": "[TG-FCT-6b] `schemas` group; `[]` when the Ecosystem owns no schema. Present iff selected (opt-in)."
           },
@@ -2169,9 +2364,24 @@
               },
               {
                 "type": "object"
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    {
+                      "type": "object"
+                    }
+                  ]
+                }
               }
             ],
-            "description": "Endpoint value preserved verbatim per DID-CORE (URI string or object)."
+            "description": "Endpoint value preserved verbatim per DID-CORE (URI string, object, or array of these)."
           },
           "lastObservedAtTime": {
             "$ref": "#/components/schemas/search_response_Iso8601DateTime"
@@ -2937,6 +3147,21 @@
               },
               {
                 "type": "object"
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    {
+                      "type": "object"
+                    }
+                  ]
+                }
               }
             ]
           },
@@ -2961,6 +3186,18 @@
           }
         ],
         "description": "Either an EcsCredential or a Vtc record. The graph dispatches on the actual stored shape."
+      },
+      "traverse_response_IdOnlyRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "description": "Reference to a `CredentialSchema`, `Ecosystem` or `Corporation` record that is not yet materialised, per [[TG-QRY-3]].",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
       },
       "traverse_response_A1Output": {
         "type": "object",
@@ -3025,7 +3262,14 @@
         "description": "A2 — Governing chain. Owning Corporation and the deduplicated set of Ecosystems whose schemas the DID participates in.",
         "properties": {
           "corporation": {
-            "$ref": "#/components/schemas/traverse_response_CorporationRef"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/traverse_response_CorporationRef"
+              },
+              {
+                "$ref": "#/components/schemas/traverse_response_IdOnlyRef"
+              }
+            ]
           },
           "ecosystems": {
             "type": "array",
@@ -3067,10 +3311,24 @@
               "$ref": "#/components/schemas/traverse_response_ParticipantRef"
             },
             "schema": {
-              "$ref": "#/components/schemas/traverse_response_CredentialSchemaRef"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/traverse_response_CredentialSchemaRef"
+                },
+                {
+                  "$ref": "#/components/schemas/traverse_response_IdOnlyRef"
+                }
+              ]
             },
             "ecosystem": {
-              "$ref": "#/components/schemas/traverse_response_EcosystemRef"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/traverse_response_EcosystemRef"
+                },
+                {
+                  "$ref": "#/components/schemas/traverse_response_IdOnlyRef"
+                }
+              ]
             }
           }
         }
@@ -3095,10 +3353,24 @@
                   "$ref": "#/components/schemas/traverse_response_DidString"
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/traverse_response_CredentialSchemaRef"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/traverse_response_CredentialSchemaRef"
+                    },
+                    {
+                      "$ref": "#/components/schemas/traverse_response_IdOnlyRef"
+                    }
+                  ]
                 },
                 "ecosystem": {
-                  "$ref": "#/components/schemas/traverse_response_EcosystemRef"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/traverse_response_EcosystemRef"
+                    },
+                    {
+                      "$ref": "#/components/schemas/traverse_response_IdOnlyRef"
+                    }
+                  ]
                 }
               }
             }
@@ -3117,10 +3389,24 @@
                   "$ref": "#/components/schemas/traverse_response_DidString"
                 },
                 "schema": {
-                  "$ref": "#/components/schemas/traverse_response_CredentialSchemaRef"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/traverse_response_CredentialSchemaRef"
+                    },
+                    {
+                      "$ref": "#/components/schemas/traverse_response_IdOnlyRef"
+                    }
+                  ]
                 },
                 "ecosystem": {
-                  "$ref": "#/components/schemas/traverse_response_EcosystemRef"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/traverse_response_EcosystemRef"
+                    },
+                    {
+                      "$ref": "#/components/schemas/traverse_response_IdOnlyRef"
+                    }
+                  ]
                 }
               }
             }
@@ -3139,10 +3425,24 @@
               "$ref": "#/components/schemas/traverse_response_ParticipantRef"
             },
             "schema": {
-              "$ref": "#/components/schemas/traverse_response_CredentialSchemaRef"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/traverse_response_CredentialSchemaRef"
+                },
+                {
+                  "$ref": "#/components/schemas/traverse_response_IdOnlyRef"
+                }
+              ]
             },
             "ecosystem": {
-              "$ref": "#/components/schemas/traverse_response_EcosystemRef"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/traverse_response_EcosystemRef"
+                },
+                {
+                  "$ref": "#/components/schemas/traverse_response_IdOnlyRef"
+                }
+              ]
             }
           }
         }
@@ -3163,10 +3463,24 @@
             "$ref": "#/components/schemas/traverse_response_ParticipantRef"
           },
           "schema": {
-            "$ref": "#/components/schemas/traverse_response_CredentialSchemaRef"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/traverse_response_CredentialSchemaRef"
+              },
+              {
+                "$ref": "#/components/schemas/traverse_response_IdOnlyRef"
+              }
+            ]
           },
           "ecosystem": {
-            "$ref": "#/components/schemas/traverse_response_EcosystemRef"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/traverse_response_EcosystemRef"
+              },
+              {
+                "$ref": "#/components/schemas/traverse_response_IdOnlyRef"
+              }
+            ]
           }
         }
       },
@@ -3183,7 +3497,15 @@
             "$ref": "#/components/schemas/traverse_response_DidString"
           },
           "holderParticipant": {
-            "$ref": "#/components/schemas/traverse_response_ParticipantRef"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/traverse_response_ParticipantRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`null` when the credential has no HOLDER `Participant` (`participantId` 0, as for a self-issued credential)."
           }
         }
       },
