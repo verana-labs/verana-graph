@@ -14,7 +14,8 @@
       "!**/dist",
       "!**/coverage",
       "!**/pnpm-lock.yaml",
-      "!**/spec"
+      "!**/spec",
+      "!docs/api/openapi.json"
     ]
   },
   "formatter": {
