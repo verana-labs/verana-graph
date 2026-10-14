@@ -165,9 +165,10 @@
         "serviceEndpoint": {
           "anyOf": [
             { "type": "string", "format": "uri" },
-            { "type": "object" }
+            { "type": "object" },
+            { "type": "array", "minItems": 1, "items": { "anyOf": [{ "type": "string", "format": "uri" }, { "type": "object" }] } }
           ],
-          "description": "Endpoint value preserved verbatim per DID-CORE (URI string or object)."
+          "description": "Endpoint value preserved verbatim per DID-CORE (URI string, object, or array of these)."
         }
       }
     },
@@ -193,7 +194,7 @@
         "schemas": {
           "type": "array",
           "description": "One entry per member of `Ecosystem.credentialSchemaIds[]`; `[]` when the Ecosystem owns no schema.",
-          "items": { "$ref": "#/$defs/SchemaRef" }
+          "items": { "anyOf": [{ "$ref": "#/$defs/SchemaRef" }, { "$ref": "#/$defs/IdOnlyRef" }] }
         }
       }
     },
@@ -261,6 +262,15 @@
         "participants": { "$ref": "#/$defs/RoleCountMap", "description": "`CredentialSchema.participants` — the schema's per-role participant counts." }
       }
     },
+    "IdOnlyRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "description": "Reference to a `CredentialSchema` record that is not yet materialised, per [TG-FCT-6b].",
+      "properties": {
+        "id": { "type": "integer", "minimum": 0 }
+      }
+    },
     "DidCard": {
       "type": "object",
       "additionalProperties": true,
@@ -321,7 +331,7 @@
         "corporation": { "$ref": "#/$defs/DidSnippetCorporation", "description": "[TG-FCT-6b] `corporation` group via `Ecosystem.corporationId` — same field set as the `Did`-surface group; never `null`. Present iff selected (default set)." },
         "stats": { "$ref": "#/$defs/EntityStats", "description": "[TG-FCT-6b] `stats` group. Present iff selected (default set)." },
         "governance": { "oneOf": [{ "$ref": "#/$defs/GovernanceFrameworkSummary" }, { "type": "null" }], "description": "[TG-FCT-6b] `governance` group — the inline `egf` summary; `null` when the Ecosystem has not yet published any GF. Present iff selected (opt-in)." },
-        "schemas": { "type": "array", "items": { "$ref": "#/$defs/SchemaRef" }, "description": "[TG-FCT-6b] `schemas` group; `[]` when the Ecosystem owns no schema. Present iff selected (opt-in)." },
+        "schemas": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/SchemaRef" }, { "$ref": "#/$defs/IdOnlyRef" }] }, "description": "[TG-FCT-6b] `schemas` group; `[]` when the Ecosystem owns no schema. Present iff selected (opt-in)." },
         "didCard": { "$ref": "#/$defs/DidCard", "description": "[TG-FCT-6b] `didCard` group — the controller DID (`Ecosystem.did`) as a card. Present iff selected (default set)." }
       }
     },
@@ -445,9 +455,10 @@
         "serviceEndpoint": {
           "anyOf": [
             { "type": "string", "format": "uri" },
-            { "type": "object" }
+            { "type": "object" },
+            { "type": "array", "minItems": 1, "items": { "anyOf": [{ "type": "string", "format": "uri" }, { "type": "object" }] } }
           ],
-          "description": "Endpoint value preserved verbatim per DID-CORE (URI string or object)."
+          "description": "Endpoint value preserved verbatim per DID-CORE (URI string, object, or array of these)."
         },
         "lastObservedAtTime": { "$ref": "#/$defs/Iso8601DateTime" },
         "didCard": { "$ref": "#/$defs/DidCard", "description": "[TG-FCT-6b] `didCard` group — the owning DID as a card. Present iff selected (default set)." }
