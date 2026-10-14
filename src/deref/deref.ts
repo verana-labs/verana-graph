@@ -8,6 +8,9 @@ import { SchemaLoadRequest } from '../ingest/reconciler'
 import { Logger } from '../util/logger'
 import { type DidDocResolver, resolveWebvhDidDocument, verifyVpSignature } from './vpVerify'
 
+const SCHEMA_RETRY_BASE_MS = 60_000
+const SCHEMA_RETRY_MAX_MS = 3_600_000
+
 export function digestSriOf(bytes: string, algo: 'sha256' | 'sha384' | 'sha512'): string {
   const hash = createHash(algo).update(bytes, 'utf8').digest('base64')
   return `${algo}-${hash}`
@@ -32,15 +35,37 @@ export class Dereferencer {
   ) {}
 
   // TG-DEREF-2 step 1: load once, validate against digestSri, then insert the record. The row
-  // never exists without a body. Failures are logged and retried on the next surfacing.
+  // never exists without a body. Failures are persisted and retried with capped backoff.
   async loadSchemas(requests: SchemaLoadRequest[]): Promise<void> {
     for (const req of requests) {
       try {
         await this.loadSchema(req)
+        await this.db('schema_load_retries').where('schema_id', req.schemaId).delete()
       } catch (err) {
         this.log.warn({ schemaId: req.schemaId, err: (err as Error).message }, 'schema load failed')
+        const prev = await this.db('schema_load_retries')
+          .where('schema_id', req.schemaId)
+          .first<{ attempts: number } | undefined>('attempts')
+        const attempts = (prev?.attempts ?? 0) + 1
+        const delay = Math.min(SCHEMA_RETRY_BASE_MS * 2 ** (attempts - 1), SCHEMA_RETRY_MAX_MS)
+        await this.db('schema_load_retries')
+          .insert({
+            schema_id: req.schemaId,
+            request: JSON.stringify(req),
+            attempts,
+            next_attempt_at: new Date(Date.now() + delay),
+          })
+          .onConflict('schema_id')
+          .merge()
       }
     }
+  }
+
+  async retrySchemaLoads(): Promise<void> {
+    const due = await this.db('schema_load_retries')
+      .where('next_attempt_at', '<=', new Date())
+      .select<{ request: SchemaLoadRequest }[]>('request')
+    await this.loadSchemas(due.map(r => r.request))
   }
 
   private async loadSchema(req: SchemaLoadRequest): Promise<void> {

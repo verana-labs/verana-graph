@@ -39,6 +39,7 @@ export async function freshDb(): Promise<Knex> {
     'lvp_vtcs',
     'participants',
     'gf_doc_bodies',
+    'schema_load_retries',
   ]
   await db.raw(`TRUNCATE ${tables.join(', ')}`)
   return db

@@ -339,6 +339,7 @@ export class IngestOrchestrator {
     this.lastAppliedBlock = msg.block
     this.events.emit('commit', { block: msg.block, blockTime: msg.blockTime })
     for (const task of postCommit) await task()
+    await this.deref.retrySchemaLoads()
   }
 
   private async applyEnvelope(

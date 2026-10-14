@@ -357,6 +357,26 @@ describe('ingestion lifecycle', () => {
     await waitFor(async () => (await db('credential_schemas').where('id', 101).first())?.archived === false)
   })
 
+  it('TG-DEREF-2: a failed schema load is retried on a later block without a resolve', async () => {
+    const body = mock.world.schemaBodies.get(101) as string
+    mock.world.schemaBodies.delete(101)
+    await orchestrator.start()
+    await waitFor(async () => (await db('ingestion_state').first())?.last_applied_block === 99)
+    expect(await db('credential_schemas').where('id', 101).first()).toBeUndefined()
+
+    mock.world.schemaBodies.set(101, body)
+    expect(
+      await db('schema_load_retries')
+        .where('schema_id', 101)
+        .update({ next_attempt_at: new Date(0) }),
+    ).toBe(1)
+    const resolves = mock.resolveCalls.length
+    mock.pushBlock(block(100, []))
+    await waitFor(async () => !(await db('schema_load_retries').first()))
+    expect(await db('credential_schemas').where('id', 101).first()).toBeTruthy()
+    expect(mock.resolveCalls.length).toBe(resolves)
+  })
+
   it('TG-ACT-1: removing the last referencing VP garbage-collects the orphan Vtc', async () => {
     await bootstrapped()
     mock.world.snapshots.get(DIDS.vs)?.set(104, vsSnapshot(false))
