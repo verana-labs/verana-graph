@@ -434,6 +434,32 @@ describe('read APIs against a bootstrapped graph', () => {
       expect((corp.body as { hits: { id: number }[] }).hits.map(h => h.id)).toEqual([42])
     })
 
+    it('TG-FCT-4a: freeText tokens split on punctuation and all must match, with no operators', async () => {
+      const ids = async (payload: Record<string, unknown>): Promise<unknown[]> =>
+        ((await search(payload)).body as { hits: { id: unknown }[] }).hits.map(h => h.id)
+      expect(await ids({ surface: 'Did', freeText: 'baby or zzzqqq' })).toEqual([])
+      expect(await ids({ surface: 'Did', freeText: 'baby -shoes' })).toEqual([DIDS.vs])
+      expect(await ids({ surface: 'Did', freeText: '"shoes baby"' })).toEqual([DIDS.vs])
+      expect(await ids({ surface: 'CredentialSchema', freeText: 'schema-organization' })).toEqual([101])
+      expect(await ids({ surface: 'CredentialSchema', freeText: '- "' })).toEqual(
+        await ids({ surface: 'CredentialSchema' }),
+      )
+      expect(await ids({ surface: 'CredentialSchema', freeText: 'zq'.repeat(1024) })).toEqual([])
+      expect(await ids({ surface: 'ServiceEndpoint', freeText: 'vs.mock MCP' })).toEqual(['did:mock:vs#mcp'])
+
+      const endpoint = { uri: 'https://relay.example', accept: ['didcomm/v2'] }
+      await db('service_endpoints')
+        .where('id', 'did:mock:vs#mcp')
+        .update({ service_endpoint: JSON.stringify(endpoint) })
+      const nested = await ids({ surface: 'ServiceEndpoint', freeText: 'relay v2' })
+      const key = await ids({ surface: 'ServiceEndpoint', freeText: 'accept' })
+      await db('service_endpoints')
+        .where('id', 'did:mock:vs#mcp')
+        .update({ service_endpoint: JSON.stringify('https://vs.mock/mcp') })
+      expect(nested).toEqual(['did:mock:vs#mcp'])
+      expect(key).toEqual([])
+    })
+
     it('ecosystem surface with participants[role] range filter', async () => {
       const { body } = await search({
         surface: 'Ecosystem',

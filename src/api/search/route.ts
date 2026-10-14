@@ -30,7 +30,6 @@ interface SurfaceDef {
   table: string
   alias: string
   pk: string
-  hasVec: boolean
   // TG-FCT-5 ranking signals; direction is normative, weights are ours
   scoreExpr: string
   gates: (q: Knex.QueryBuilder, req: SearchRequest) => void
@@ -202,7 +201,6 @@ const SURFACES: Record<Surface, SurfaceDef> = {
     table: 'dids',
     alias: 'd',
     pk: 'd.did',
-    hasVec: true,
     scoreExpr: `
       coalesce(ln(1 + coalesce(corp.deposit_amount, 0) / 1000000.0) * 0.5, 0)
       - coalesce(corp.slashed_events, 0) * 0.5
@@ -257,7 +255,6 @@ const SURFACES: Record<Surface, SurfaceDef> = {
     table: 'ecosystems',
     alias: 'e',
     pk: 'e.id',
-    hasVec: true,
     scoreExpr: `
       ln(1 + coalesce(e.issued_credentials, 0) + coalesce(e.verified_credentials, 0)) * 0.3
       + extract(epoch from e.last_observed_at_time) / 1e12`,
@@ -300,7 +297,6 @@ const SURFACES: Record<Surface, SurfaceDef> = {
     table: 'corporations',
     alias: 'c',
     pk: 'c.id',
-    hasVec: true,
     scoreExpr: `
       coalesce(ln(1 + coalesce(c.deposit_amount, 0) / 1000000.0) * 0.5, 0)
       - c.slashed_events * 0.5
@@ -346,7 +342,6 @@ const SURFACES: Record<Surface, SurfaceDef> = {
     table: 'credential_schemas',
     alias: 'cs',
     pk: 'cs.id',
-    hasVec: true,
     scoreExpr: `
       ln(1 + coalesce(cs.issued_credentials, 0) + coalesce(cs.verified_credentials, 0)) * 0.3
       + extract(epoch from cs.last_observed_at_time) / 1e12`,
@@ -382,7 +377,6 @@ const SURFACES: Record<Surface, SurfaceDef> = {
     table: 'service_endpoints',
     alias: 'se',
     pk: 'se.id',
-    hasVec: false,
     scoreExpr: 'extract(epoch from se.last_observed_at_time) / 1e12',
     gates(q, req) {
       // hits mirror the owning DID's gates (TG-FCT-2)
@@ -422,6 +416,26 @@ function compileRequestSchema(): ValidateFunction {
   return ajv.compile(schema)
 }
 
+// keeps each tsquery far below the planner's stack depth and the 1MB tsquery operand limit
+const FREE_TEXT_CHUNK = 256
+
+// Postgres drops a word of 2047+ bytes and rejects one that lowercases past that, so it never matches
+async function freeTextChunks(db: Knex, freeText: string): Promise<string[] | null> {
+  const { rows } = await db.raw(
+    `select bool_or(greatest(octet_length(token), octet_length(l)) >= 2047) as unmatchable,
+       coalesce(array_agg(distinct l), '{}') as lexemes
+     from ts_debug('simple', search_tokens(?)), unnest(lexemes) as l`,
+    [freeText],
+  )
+  const { unmatchable, lexemes } = rows[0] as { unmatchable: boolean | null; lexemes: string[] }
+  if (unmatchable) return null
+  const chunks: string[] = []
+  for (let i = 0; i < lexemes.length; i += FREE_TEXT_CHUNK) {
+    chunks.push(lexemes.slice(i, i + FREE_TEXT_CHUNK).join(' '))
+  }
+  return chunks
+}
+
 export function registerSearchRoute(app: FastifyInstance, db: Knex): void {
   const validate = compileRequestSchema()
 
@@ -437,6 +451,7 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex): void {
       : def.defaults
     const groups = Object.entries(def.groups).filter(([name]) => wanted.includes(name))
     const freeText = req.freeText?.trim() || undefined
+    const chunks = freeText ? await freeTextChunks(db, freeText) : undefined
     const limit = req.limit ?? 20
     const hash = queryHash(req as unknown as Record<string, unknown>)
 
@@ -460,19 +475,19 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex): void {
         if (spec.facet && (norm.op === 'eq' || norm.op === 'in')) facetSpecs.push([field, spec.facet])
       }
       if (req.surface === 'Did') applyParticipantExists(q, db)
-      if (freeText && def.hasVec) {
-        q.whereRaw(`${def.alias}.search_vec @@ websearch_to_tsquery('simple', ?)`, [freeText])
+      if (chunks === null) q.whereRaw('false')
+      for (const chunk of chunks ?? []) {
+        q.whereRaw(`${def.alias}.search_vec @@ plainto_tsquery('simple', ?)`, [chunk])
       }
       return { q, facetSpecs }
     }
 
     // float8 end to end: NUMERIC scores round-trip through JS as lossy strings and break the
     // keyset boundary comparison
-    const scoreSelect =
-      freeText && def.hasVec
-        ? `(ts_rank(${def.alias}.search_vec, websearch_to_tsquery('simple', ?)) * 10 + ${def.scoreExpr})::float8`
-        : `(${def.scoreExpr})::float8`
-    const scoreBindings = freeText && def.hasVec ? [freeText] : []
+    const scoreSelect = chunks?.length
+      ? `(ts_rank(${def.alias}.search_vec, plainto_tsquery('simple', ?)) * 10 + ${def.scoreExpr})::float8`
+      : `(${def.scoreExpr})::float8`
+    const scoreBindings = chunks?.slice(0, 1) ?? []
 
     const { q: hitsQuery, facetSpecs } = base()
     for (const field of def.defaultFacets) {

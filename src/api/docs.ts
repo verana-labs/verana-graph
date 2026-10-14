@@ -59,7 +59,7 @@ export function registerDocs(app: FastifyInstance): void {
 
 **surface** (required): \`Did\`, \`Ecosystem\`, \`Corporation\`, \`CredentialSchema\`, \`ServiceEndpoint\`
 
-**freeText**: ranked full-text match on the surface.
+**freeText**: ranked full-text match on the surface. The text splits on whitespace and punctuation and every token must match a whole word, case-insensitive, with no operators (TG-FCT-4a).
 
 **filters**: object keyed by field. A bare scalar means equals, an array means any-of, or pass an operator object (\`eq\`, \`in\`, \`prefix\`, \`range\`, \`contains\`, \`containsAny\`). Fields on the Did surface: \`Did.trusted\`, \`Did.pattern\`, \`Did.serviceTypes\`, \`Did.corporationId\`, \`Did.isCorporation\`, \`Did.isEcosystem\`, \`Did.ecosystemIds\`, \`Did.operatorKind\`, \`Did.operatorName\`, \`EcsCredential.ServiceCredential.type\`, \`EcsCredential.ServiceCredential.minimumAgeRequired\`, \`OrganizationCredential.countryCode\`, \`OrganizationCredential.legalJurisdiction\`, \`OrganizationCredential.organizationKind\`, \`OrganizationCredential.lei\`, \`OrganizationCredential.registryId\`, \`PersonaCredential.controllerCountryCode\`, \`PersonaCredential.controllerJurisdiction\`, \`Participant.ecosystemId\`, \`Participant.credentialSchemaId\`, \`Participant.role\`. \`Did.serviceTypes\` and \`Did.ecosystemIds\` take \`contains\` or \`containsAny\` only. An unknown field returns \`UNKNOWN_FILTER_FIELD\`.
 
