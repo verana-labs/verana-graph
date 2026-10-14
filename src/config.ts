@@ -28,7 +28,6 @@ export interface Config {
   fetchVpBodies: boolean
   gapCoalesceThreshold: number
   bpsMaxBufferedBytes: number
-  gateServiceEndpoints: boolean
   trustRefreshIntervalMs: number
   trustRefreshBatch: number
   logLevel: string
@@ -45,7 +44,6 @@ export function loadConfig(): Config {
     fetchVpBodies: bool('FETCH_VP_BODIES', true),
     gapCoalesceThreshold: int('GAP_COALESCE_THRESHOLD', 1000),
     bpsMaxBufferedBytes: int('BPS_MAX_BUFFERED_BYTES', 1024 * 1024),
-    gateServiceEndpoints: bool('GATE_SERVICE_ENDPOINTS', false),
     // 0 disables the sweep and follows the spec literally (event-driven resolves only)
     trustRefreshIntervalMs: int('TRUST_REFRESH_INTERVAL_MS', 0),
     trustRefreshBatch: int('TRUST_REFRESH_BATCH', 200),

@@ -44,8 +44,6 @@ spec:
               value: {{ .Values.config.fetchGfDocBodies | quote }}
             - name: FETCH_VP_BODIES
               value: {{ .Values.config.fetchVpBodies | quote }}
-            - name: GATE_SERVICE_ENDPOINTS
-              value: {{ .Values.config.gateServiceEndpoints | quote }}
             - name: GAP_COALESCE_THRESHOLD
               value: {{ .Values.config.gapCoalesceThreshold | quote }}
             - name: BPS_MAX_BUFFERED_BYTES

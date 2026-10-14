@@ -39,7 +39,7 @@ app.get('/health', async () => ({
 registerDocs(app)
 registerExplorer(app)
 registerTraverseRoute(app, db)
-registerSearchRoute(app, db, config)
+registerSearchRoute(app, db)
 
 await app.listen({ port: config.port, host: '0.0.0.0' })
 attachBlockProgressServer(app.server, orchestrator, config.bpsMaxBufferedBytes, log)

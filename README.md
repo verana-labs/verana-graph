@@ -31,8 +31,7 @@ See [.env.example](./.env.example). Notable flags: `FETCH_VP_BODIES` is on by de
 the linked VP bodies (TG-DEREF-3 RECOMMENDED) that feed the domain-credential text slot of TG-FCT-4
 and the credential claims of the search snippet. Set it to `false` to stop the graph fetching
 holder-hosted URLs. `FETCH_GF_DOC_BODIES` opts into the governance document fetch of TG-DEREF-2a/2b
-(full-text search over governance documents). `GATE_SERVICE_ENDPOINTS` applies owner trust gates on
-the ServiceEndpoint search surface ahead of the spec settling that question.
+(full-text search over governance documents).
 
 ## Test
 

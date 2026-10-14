@@ -59,7 +59,7 @@ describe.skipIf(!INDEXER_URL)('graph against a live indexer', () => {
       throw err
     })
     registerTraverseRoute(app, db)
-    registerSearchRoute(app, db, config)
+    registerSearchRoute(app, db)
     await app.listen({ port: 0 })
     const address = app.server.address()
     baseUrl = `http://localhost:${typeof address === 'object' && address ? address.port : 0}`

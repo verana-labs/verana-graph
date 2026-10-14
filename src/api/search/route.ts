@@ -3,7 +3,6 @@ import { Ajv2020 as Ajv, ValidateFunction } from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 import { FastifyInstance } from 'fastify'
 import { Knex } from 'knex'
-import { Config } from '../../config'
 import { ApiError } from '../errors'
 import { isTrustExpired } from '../refs'
 import { decodeCursor, encodeCursor, queryHash } from './cursor'
@@ -34,7 +33,7 @@ interface SurfaceDef {
   hasVec: boolean
   // TG-FCT-5 ranking signals; direction is normative, weights are ours
   scoreExpr: string
-  gates: (q: Knex.QueryBuilder, req: SearchRequest, config: Config) => void
+  gates: (q: Knex.QueryBuilder, req: SearchRequest) => void
   coreSelect?: (q: Knex.QueryBuilder) => void
   core: (row: Record<string, unknown>) => Record<string, unknown>
   groups: Record<string, GroupDef>
@@ -385,22 +384,17 @@ const SURFACES: Record<Surface, SurfaceDef> = {
     pk: 'se.id',
     hasVec: false,
     scoreExpr: 'extract(epoch from se.last_observed_at_time) / 1e12',
-    gates(q, _req, config) {
-      // ungated per spec-as-written; the flag applies owner gates pending the filed
-      // ServiceEndpoint-gate issue on verana-spec
-      if (config.gateServiceEndpoints) {
-        q.whereExists(function () {
-          this.select(1)
-            .from('dids as dx')
-            .whereRaw('dx.did = se.did_id')
-            .where('dx.trusted', true)
-            .where(qb =>
-              qb
-                .whereNull('dx.expires_at_time')
-                .orWhere('dx.expires_at_time', '>=', new Date().toISOString()),
-            )
-        })
-      }
+    gates(q, req) {
+      // hits mirror the owning DID's gates (TG-FCT-2)
+      q.whereExists(function () {
+        this.select(1)
+          .from('dids as dx')
+          .whereRaw('dx.did = se.did_id')
+          .where(qb =>
+            qb.whereNull('dx.expires_at_time').orWhere('dx.expires_at_time', '>=', new Date().toISOString()),
+          )
+        if (!req.includeUntrusted) this.where('dx.trusted', true)
+      })
     },
     core: r => ({
       id: r.id,
@@ -428,7 +422,7 @@ function compileRequestSchema(): ValidateFunction {
   return ajv.compile(schema)
 }
 
-export function registerSearchRoute(app: FastifyInstance, db: Knex, config: Config): void {
+export function registerSearchRoute(app: FastifyInstance, db: Knex): void {
   const validate = compileRequestSchema()
 
   app.post('/v4/graph/search', async (request, reply) => {
@@ -451,7 +445,7 @@ export function registerSearchRoute(app: FastifyInstance, db: Knex, config: Conf
       if (req.surface === 'Did') {
         q.leftJoin('corporations as corp', 'corp.id', 'd.corporation_id')
       }
-      def.gates(q, req, config)
+      def.gates(q, req)
       const facetSpecs: [string, NonNullable<ReturnType<typeof resolveFieldSpec>['facet']>][] = []
       for (const [field, raw] of Object.entries(req.filters ?? {})) {
         const spec = resolveFieldSpec(req.surface, field)
