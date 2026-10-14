@@ -25,7 +25,9 @@
     "test:all": "vitest run",
     "prepare": "corepack enable",
     "test:db": "vitest run test/integration",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "openapi:export": "tsx scripts/export-openapi.ts && biome format --write docs/api/openapi.json",
+    "openapi:check": "pnpm openapi:export && git diff --exit-code -- docs/api/openapi.json"
   },
   "dependencies": {
     "@digitalbazaar/ed25519-signature-2020": "5.4.0",

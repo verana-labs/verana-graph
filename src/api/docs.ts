@@ -32,8 +32,9 @@ function loadSchema(name: string): Record<string, unknown> {
   return rewriteRefs(schema, prefix) as Record<string, unknown>
 }
 
-export function registerDocs(app: FastifyInstance): void {
-  const document = {
+/** The OpenAPI document served at /docs/openapi.json, also exported to docs/api/openapi.json. */
+export function buildOpenApiDocument() {
+  return {
     openapi: '3.1.0',
     info: {
       title: 'Verana Graph API',
@@ -209,7 +210,10 @@ Errors (TG-ERR-1 envelope): \`INVALID_INPUT\`, \`UNKNOWN_QUERY\`, \`UNKNOWN_ID\`
     },
     components: { schemas: components },
   }
+}
 
+export function registerDocs(app: FastifyInstance): void {
+  const document = buildOpenApiDocument()
   const assetRoot = getAbsoluteFSPath()
   app.get('/docs', async (_req, reply) =>
     reply.header('cache-control', 'no-store').type('text/html; charset=utf-8').send(PAGE),
