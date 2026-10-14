@@ -566,6 +566,14 @@ describe('read APIs against a bootstrapped graph', () => {
       expect(validateSearch(body)).toBe(true)
     })
 
+    it('a role missing from the participants map counts as zero', async () => {
+      const { body } = await search({
+        surface: 'Ecosystem',
+        filters: { 'participants[VERIFIER]': { range: { lte: 0 } } },
+      })
+      expect((body as { hits: { id: number }[] }).hits.map(h => h.id)).toEqual([7])
+    })
+
     it('TG-FCT-6: the Did surface carries its default facets and never the near-unique ones', async () => {
       const { body } = await search({ surface: 'Did' })
       expect(validateSearch(body)).toBe(true)
@@ -600,6 +608,60 @@ describe('read APIs against a bootstrapped graph', () => {
       expect(await keysOf('Corporation')).toEqual([])
       expect(await keysOf('CredentialSchema')).toEqual(['archived', 'ecosystemId'])
       expect(await keysOf('ServiceEndpoint')).toEqual(['type'])
+    })
+
+    it('TG-FCT-3: prefix takes % and _ literally', async () => {
+      const matches = async (prefix: string): Promise<string[]> => {
+        const { body } = await search({ surface: 'Did', filters: { 'Did.operatorName': { prefix } } })
+        return (body as { hits: { id: string }[] }).hits.map(h => h.id).sort()
+      }
+      expect(await matches('Acme')).toEqual([DIDS.issuer, DIDS.vs].sort())
+      expect(await matches('_cme')).toEqual([])
+      expect(await matches('%')).toEqual([])
+    })
+
+    it('TG-ACT-1: ECS data past its validUntil leaves groups, filters, facets and free text', async () => {
+      const past = '2000-01-01T00:00:00Z'
+      await db('dids').where('did', DIDS.vs).update({ sc_valid_until: past })
+      await db('dids').whereIn('did', [DIDS.eco, DIDS.issuer]).update({ operator_valid_until: past })
+      try {
+        const all = await search({ surface: 'Did' })
+        expect(validateSearch(all.body)).toBe(true)
+        const b = all.body as {
+          hits: { id: string; snippet: Record<string, unknown> }[]
+          facets: Record<string, unknown>
+        }
+        const vs = b.hits.find(h => h.id === DIDS.vs)?.snippet
+        expect(vs?.service).toBeNull()
+        expect(vs?.operator).toBeNull()
+        expect(b.hits.find(h => h.id === DIDS.issuer)?.snippet.operator).toBeNull()
+        expect(b.facets['EcsCredential.ServiceCredential.type']).toEqual([])
+        expect(b.facets['OrganizationCredential.countryCode']).toEqual([])
+
+        const ids = async (payload: Record<string, unknown>): Promise<unknown[]> =>
+          ((await search(payload)).body as { hits: { id: unknown }[] }).hits.map(h => h.id)
+        expect(
+          await ids({ surface: 'Did', filters: { 'OrganizationCredential.countryCode': 'DE' } }),
+        ).toEqual([])
+        expect(await ids({ surface: 'Did', filters: { 'Did.pattern': 'B' } })).toEqual([])
+        expect(await ids({ surface: 'Did', freeText: 'baby' })).toEqual([])
+        expect(await ids({ surface: 'Did', freeText: 'acme' })).toEqual([])
+        expect(await ids({ surface: 'Did', freeText: 'plumber' })).toEqual([DIDS.issuer, DIDS.vs])
+        expect(await ids({ surface: 'Ecosystem', freeText: 'banking' })).toEqual([7])
+        expect(await ids({ surface: 'Ecosystem', freeText: 'acme' })).toEqual([])
+        await db('dids').where('did', DIDS.eco).update({ sc_description: 'Register of supervised banks.eu' })
+        expect(await ids({ surface: 'Ecosystem', freeText: 'banks' })).toEqual([7])
+
+        const eco = await search({ surface: 'Ecosystem' })
+        const card = (eco.body as { hits: { snippet: { didCard: Record<string, unknown> } }[] }).hits[0]
+        expect((card?.snippet.didCard.service as { name: string }).name).toBe('EU Banking Registry')
+        expect(card?.snippet.didCard.operator).toBeNull()
+      } finally {
+        await db('dids')
+          .whereIn('did', [DIDS.vs, DIDS.eco, DIDS.issuer])
+          .update({ sc_valid_until: null, operator_valid_until: null })
+        await db('dids').where('did', DIDS.eco).update({ sc_description: 'Register of supervised banks' })
+      }
     })
   })
 

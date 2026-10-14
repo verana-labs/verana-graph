@@ -340,14 +340,16 @@ async function operativeIdentity(
   const issuerCreds = await trx('ecs_credentials')
     .where('subject_did', p.issuerDid)
     .whereIn('ecs_schema', ['OrganizationCredential', 'PersonaCredential'])
-    .select<{ ecs_schema: string; credential_subject: Record<string, unknown> }[]>(
+    .select<{ ecs_schema: string; credential_subject: Record<string, unknown>; valid_until: Date | null }[]>(
       'ecs_schema',
       'credential_subject',
+      'valid_until',
     )
   return identityFromCredentials(
     issuerCreds.map(c => ({
       ecsSchema: c.ecs_schema as EcsCredentialEntry['ecsSchema'],
       credentialSubject: c.credential_subject as EcsCredentialEntry['credentialSubject'],
+      validUntil: c.valid_until?.toISOString() ?? null,
     })),
   )
 }
@@ -372,6 +374,7 @@ async function upsertDid(trx: Knex, r: ResolveResponse, e: Evidence): Promise<vo
     sc_logo_uri: facets.scLogoUri,
     sc_logo_digest_sri: facets.scLogoDigestSri,
     min_age: facets.minAge,
+    sc_valid_until: facets.scValidUntil,
     org_name: identity.orgName,
     org_address: identity.orgAddress,
     org_country_code: identity.orgCountryCode,
@@ -387,6 +390,7 @@ async function upsertDid(trx: Knex, r: ResolveResponse, e: Evidence): Promise<vo
     persona_jurisdiction: identity.personaJurisdiction,
     persona_avatar_uri: identity.personaAvatarUri,
     persona_avatar_digest_sri: identity.personaAvatarDigestSri,
+    operator_valid_until: identity.operatorValidUntil,
     schema_text: await schemaTextForDid(trx, r.did),
     vtc_text: await vtcTextForDid(trx, r.did),
     ...freshness(e),
@@ -415,14 +419,14 @@ export async function repairDerivedFacets(db: Knex): Promise<void> {
         const creds = await trx('ecs_credentials')
           .where('subject_did', sourceDid)
           .whereIn('ecs_schema', ['OrganizationCredential', 'PersonaCredential'])
-          .select<{ ecs_schema: string; credential_subject: Record<string, unknown> }[]>(
-            'ecs_schema',
-            'credential_subject',
-          )
+          .select<
+            { ecs_schema: string; credential_subject: Record<string, unknown>; valid_until: Date | null }[]
+          >('ecs_schema', 'credential_subject', 'valid_until')
         identity = identityFromCredentials(
           creds.map(c => ({
             ecsSchema: c.ecs_schema as EcsCredentialEntry['ecsSchema'],
             credentialSubject: c.credential_subject as EcsCredentialEntry['credentialSubject'],
+            validUntil: c.valid_until?.toISOString() ?? null,
           })),
         )
       }
@@ -444,6 +448,7 @@ export async function repairDerivedFacets(db: Knex): Promise<void> {
         persona_jurisdiction: identity.personaJurisdiction,
         persona_avatar_uri: identity.personaAvatarUri,
         persona_avatar_digest_sri: identity.personaAvatarDigestSri,
+        operator_valid_until: identity.operatorValidUntil,
       })
     })
   }
@@ -472,14 +477,16 @@ async function refreshDependentDids(trx: Knex, issuerDid: string, e: Evidence): 
   const issuerCreds = await trx('ecs_credentials')
     .where('subject_did', issuerDid)
     .whereIn('ecs_schema', ['OrganizationCredential', 'PersonaCredential'])
-    .select<{ ecs_schema: string; credential_subject: Record<string, unknown> }[]>(
+    .select<{ ecs_schema: string; credential_subject: Record<string, unknown>; valid_until: Date | null }[]>(
       'ecs_schema',
       'credential_subject',
+      'valid_until',
     )
   const identity = identityFromCredentials(
     issuerCreds.map(c => ({
       ecsSchema: c.ecs_schema as EcsCredentialEntry['ecsSchema'],
       credentialSubject: c.credential_subject as EcsCredentialEntry['credentialSubject'],
+      validUntil: c.valid_until?.toISOString() ?? null,
     })),
   )
 
@@ -503,6 +510,7 @@ async function refreshDependentDids(trx: Knex, issuerDid: string, e: Evidence): 
         persona_jurisdiction: identity.personaJurisdiction,
         persona_avatar_uri: identity.personaAvatarUri,
         persona_avatar_digest_sri: identity.personaAvatarDigestSri,
+        operator_valid_until: identity.operatorValidUntil,
         ...freshness(e),
       })
     await refreshDidText(trx, d.subject_did)

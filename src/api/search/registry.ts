@@ -86,12 +86,16 @@ export function assertOperandTypes(field: string, spec: FieldSpec, f: Normalized
   }
 }
 
+function likePrefix(value: unknown): string {
+  return `${String(value).replace(/[\\%_]/g, '\\$&')}%`
+}
+
 function scalarColumn(col: string): Pick<FieldSpec, 'apply'> {
   return {
     apply(q, f) {
       if (f.op === 'eq') q.where(col, f.value as string)
       else if (f.op === 'in') q.whereIn(col, f.value as string[])
-      else if (f.op === 'prefix') q.where(col, 'like', `${String(f.value)}%`)
+      else if (f.op === 'prefix') q.whereRaw(`${col} like ? escape '\\'`, [likePrefix(f.value)])
       else if (f.op === 'range') applyRange(q, col, f.value as RangeValue)
     },
   }
@@ -141,9 +145,34 @@ function spec(col: string, type: OperandType, ops: Operator[], facetCol?: string
   }
 }
 
+// TG-ACT-1: ECS-derived columns read as null once their credential's validUntil has passed.
+// A Pattern B operator is reached through the ServiceCredential, so it also needs that one live.
+export function ecsLive(alias: string, part: 'sc' | 'operator'): string {
+  const own = `(${alias}.${part}_valid_until is null or ${alias}.${part}_valid_until >= now())`
+  return part === 'sc'
+    ? own
+    : `(${own} and (${alias}.pattern is distinct from 'B' or ${ecsLive(alias, 'sc')}))`
+}
+
+function gated(live: string, s: FieldSpec): FieldSpec {
+  const facet = s.facet
+  return {
+    ops: s.ops,
+    type: s.type,
+    apply(q, f) {
+      s.apply(q, f)
+      q.whereRaw(live)
+    },
+    facet: facet && ((base, db) => facet(base.clone().whereRaw(live), db)),
+  }
+}
+
+const SC_LIVE = ecsLive('d', 'sc')
+const OPERATOR_LIVE = ecsLive('d', 'operator')
+
 export const DID_FILTERS: Record<string, FieldSpec> = {
   'Did.trusted': spec('d.trusted', 'boolean', ['eq'], 'd.trusted'),
-  'Did.pattern': spec('d.pattern', 'string', ['eq', 'in'], 'd.pattern'),
+  'Did.pattern': gated(SC_LIVE, spec('d.pattern', 'string', ['eq', 'in'], 'd.pattern')),
   'Did.serviceTypes': {
     ops: ['contains', 'containsAny'],
     type: 'string',
@@ -187,53 +216,55 @@ export const DID_FILTERS: Record<string, FieldSpec> = {
     },
     facet: null,
   },
-  'Did.operatorKind': spec('d.operator_kind', 'string', ['eq', 'in'], 'd.operator_kind'),
+  'Did.operatorKind': gated(
+    OPERATOR_LIVE,
+    spec('d.operator_kind', 'string', ['eq', 'in'], 'd.operator_kind'),
+  ),
   // TG-FCT-3: one derived field matching the operatorName of the snippet, so a client
   // filtering by operator name never has to branch on operatorKind
-  'Did.operatorName': {
+  'Did.operatorName': gated(OPERATOR_LIVE, {
     ops: ['eq', 'in', 'prefix'],
     type: 'string',
     apply(q, f) {
       if (f.op === 'eq') q.whereRaw('coalesce(d.org_name, d.persona_name) = ?', [f.value as string])
       else if (f.op === 'in')
         q.whereRaw('coalesce(d.org_name, d.persona_name) = any(?)', [f.value as string[]])
-      else q.whereRaw('coalesce(d.org_name, d.persona_name) like ?', [`${String(f.value)}%`])
+      else q.whereRaw(`coalesce(d.org_name, d.persona_name) like ? escape '\\'`, [likePrefix(f.value)])
     },
     facet: expressionFacet('coalesce(d.org_name, d.persona_name)'),
-  },
-  'EcsCredential.ServiceCredential.type': spec('d.sc_type', 'string', ['eq', 'in'], 'd.sc_type'),
-  'EcsCredential.ServiceCredential.minimumAgeRequired': spec('d.min_age', 'int', ['range'], null),
-  'OrganizationCredential.countryCode': spec(
-    'd.org_country_code',
-    'string',
-    ['eq', 'in'],
-    'd.org_country_code',
+  }),
+  'EcsCredential.ServiceCredential.type': gated(
+    SC_LIVE,
+    spec('d.sc_type', 'string', ['eq', 'in'], 'd.sc_type'),
   ),
-  'OrganizationCredential.legalJurisdiction': spec(
-    'd.org_legal_jurisdiction',
-    'string',
-    ['eq', 'in', 'prefix'],
-    'd.org_legal_jurisdiction',
+  'EcsCredential.ServiceCredential.minimumAgeRequired': gated(
+    SC_LIVE,
+    spec('d.min_age', 'int', ['range'], null),
   ),
-  'OrganizationCredential.organizationKind': spec(
-    'd.org_organization_kind',
-    'string',
-    ['eq', 'in'],
-    'd.org_organization_kind',
+  'OrganizationCredential.countryCode': gated(
+    OPERATOR_LIVE,
+    spec('d.org_country_code', 'string', ['eq', 'in'], 'd.org_country_code'),
   ),
-  'OrganizationCredential.lei': spec('d.org_lei', 'string', ['eq'], 'd.org_lei'),
-  'OrganizationCredential.registryId': spec('d.org_registry_id', 'string', ['eq'], 'd.org_registry_id'),
-  'PersonaCredential.controllerCountryCode': spec(
-    'd.persona_country_code',
-    'string',
-    ['eq', 'in'],
-    'd.persona_country_code',
+  'OrganizationCredential.legalJurisdiction': gated(
+    OPERATOR_LIVE,
+    spec('d.org_legal_jurisdiction', 'string', ['eq', 'in', 'prefix'], 'd.org_legal_jurisdiction'),
   ),
-  'PersonaCredential.controllerJurisdiction': spec(
-    'd.persona_jurisdiction',
-    'string',
-    ['eq', 'in', 'prefix'],
-    'd.persona_jurisdiction',
+  'OrganizationCredential.organizationKind': gated(
+    OPERATOR_LIVE,
+    spec('d.org_organization_kind', 'string', ['eq', 'in'], 'd.org_organization_kind'),
+  ),
+  'OrganizationCredential.lei': gated(OPERATOR_LIVE, spec('d.org_lei', 'string', ['eq'], 'd.org_lei')),
+  'OrganizationCredential.registryId': gated(
+    OPERATOR_LIVE,
+    spec('d.org_registry_id', 'string', ['eq'], 'd.org_registry_id'),
+  ),
+  'PersonaCredential.controllerCountryCode': gated(
+    OPERATOR_LIVE,
+    spec('d.persona_country_code', 'string', ['eq', 'in'], 'd.persona_country_code'),
+  ),
+  'PersonaCredential.controllerJurisdiction': gated(
+    OPERATOR_LIVE,
+    spec('d.persona_jurisdiction', 'string', ['eq', 'in', 'prefix'], 'd.persona_jurisdiction'),
   ),
   // Participant.* filters correlate on the SAME participant row (gap filed against TG-FCT-3)
   'Participant.ecosystemId': participantFilter('ecosystem_id', 'bigint'),
@@ -334,7 +365,7 @@ export function resolveFieldSpec(surface: string, field: string): FieldSpec {
         apply(q, f) {
           if (f.op === 'range') {
             const r = f.value as RangeValue
-            const expr = `(e.participants->>'${role}')::bigint`
+            const expr = `coalesce((e.participants->>'${role}')::bigint, 0)`
             if (r.gt !== undefined) q.whereRaw(`${expr} > ?`, [r.gt])
             if (r.gte !== undefined) q.whereRaw(`${expr} >= ?`, [r.gte])
             if (r.lt !== undefined) q.whereRaw(`${expr} < ?`, [r.lt])

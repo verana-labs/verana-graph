@@ -22,6 +22,7 @@ export interface OperativeIdentity {
   personaJurisdiction: string | null
   personaAvatarUri: string | null
   personaAvatarDigestSri: string | null
+  operatorValidUntil: string | null
 }
 
 export const EMPTY_IDENTITY: OperativeIdentity = {
@@ -41,12 +42,13 @@ export const EMPTY_IDENTITY: OperativeIdentity = {
   personaJurisdiction: null,
   personaAvatarUri: null,
   personaAvatarDigestSri: null,
+  operatorValidUntil: null,
 }
 
 // TG-FCT-3: the operative ORG-or-PERSONA credential the trust chain rests on
 // (Pattern A: the DID's own; Pattern B: the ServiceCredential issuer's)
 export function identityFromCredentials(
-  creds: Pick<EcsCredentialEntry, 'ecsSchema' | 'credentialSubject'>[],
+  creds: Pick<EcsCredentialEntry, 'ecsSchema' | 'credentialSubject' | 'validUntil'>[],
 ): OperativeIdentity {
   const out = { ...EMPTY_IDENTITY }
   const org = creds.find(c => c.ecsSchema === 'OrganizationCredential')
@@ -63,6 +65,7 @@ export function identityFromCredentials(
     out.orgRegistryId = str(s.registryId)
     out.orgLogoUri = str(s.logoUri)
     out.orgLogoDigestSri = str(s.logoDigestSri)
+    out.operatorValidUntil = org.validUntil
   } else if (persona) {
     const s = persona.credentialSubject
     out.operatorKind = 'Persona'
@@ -72,6 +75,7 @@ export function identityFromCredentials(
     out.personaJurisdiction = str(s.controllerJurisdiction)
     out.personaAvatarUri = str(s.avatarUri)
     out.personaAvatarDigestSri = str(s.avatarDigestSri)
+    out.operatorValidUntil = persona.validUntil
   }
   return out
 }
@@ -83,6 +87,7 @@ export interface ServiceFacets {
   scLogoUri: string | null
   scLogoDigestSri: string | null
   minAge: number | null
+  scValidUntil: string | null
 }
 
 export function serviceFacets(response: ResolveResponse): ServiceFacets {
@@ -95,6 +100,7 @@ export function serviceFacets(response: ResolveResponse): ServiceFacets {
       scLogoUri: null,
       scLogoDigestSri: null,
       minAge: null,
+      scValidUntil: null,
     }
   const s = sc.credentialSubject
   const age = typeof s.minimumAgeRequired === 'number' ? s.minimumAgeRequired : null
@@ -105,6 +111,7 @@ export function serviceFacets(response: ResolveResponse): ServiceFacets {
     scLogoUri: str(s.logoUri),
     scLogoDigestSri: str(s.logoDigestSri),
     minAge: age,
+    scValidUntil: sc.validUntil,
   }
 }
 
