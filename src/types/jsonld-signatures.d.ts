@@ -7,6 +7,7 @@ declare module 'jsonld-signatures' {
   export type DocumentLoader = (url: string) => Promise<DocumentLoaderResult>
   export const purposes: {
     AssertionProofPurpose: new (options?: Record<string, unknown>) => unknown
+    AuthenticationProofPurpose: new (options?: Record<string, unknown>) => unknown
   }
   export function verify(
     document: unknown,
