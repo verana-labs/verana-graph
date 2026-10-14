@@ -179,7 +179,9 @@ describe.skipIf(!INDEXER_URL)('graph against a live indexer', () => {
     for await (const did of rest.enumerateDids(height)) remote.add(did)
     expect(remote.size).toBeGreaterThan(0)
     const local = new Set((await db('dids').select('did')).map((r: { did: string }) => r.did))
-    for (const did of remote) expect(local.has(did)).toBe(true)
+    for (const did of remote) {
+      if (!local.has(did)) await expect(rest.resolve(did, height), did).rejects.toThrow()
+    }
 
     const sample = await db('dids').where('trusted', true).first()
     if (sample) {

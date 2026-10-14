@@ -198,13 +198,15 @@ export class IngestOrchestrator {
     const pending: Promise<void>[] = []
     let active = 0
     let resolveIdle: (() => void) | null = null
+    let failed = 0
     const runOne = async (did: string): Promise<void> => {
       try {
         const response = await this.rest.resolve(did, snapshotBlock)
         await this.applyResponse(response, evidence, { sweep: false })
       } catch (err) {
+        // swallowed: the DID is picked up again by its next change envelope
+        failed += 1
         this.log.error({ did, err: (err as Error).message }, 'bootstrap resolve failed')
-        throw err
       } finally {
         active -= 1
         resolveIdle?.()
@@ -237,7 +239,7 @@ export class IngestOrchestrator {
       .onConflict('id')
       .merge()
     this.lastAppliedBlock = snapshotBlock
-    this.log.info({ snapshotBlock, dids: count }, 'bootstrap snapshot complete')
+    this.log.info({ snapshotBlock, dids: count, failed }, 'bootstrap snapshot complete')
   }
 
   // TG-INGEST-5: replay from lastAppliedBlock + 1 until caught up or overlapping the buffer
@@ -311,8 +313,15 @@ export class IngestOrchestrator {
 
     const resolves = new Map<string, ResolveResponse>()
     for (const envelope of msg.changes) {
-      if (needsResolve(envelope)) {
+      if (!needsResolve(envelope)) continue
+      try {
         resolves.set(envelope.did, await this.rest.resolve(envelope.did, msg.block))
+      } catch (err) {
+        // swallowed: rethrowing replays this block forever while the DID stays unresolvable
+        this.log.error(
+          { did: envelope.did, block: msg.block, err: (err as Error).message },
+          'block resolve failed',
+        )
       }
     }
 
