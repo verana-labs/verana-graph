@@ -8,7 +8,8 @@
   "packages": {
     ".": {
       "changelog-path": "CHANGELOG.md",
-      "release-type": "node"
+      "release-type": "node",
+      "extra-files": [{ "type": "json", "path": "docs/api/openapi.json", "jsonpath": "$.info.version" }]
     }
   }
 }

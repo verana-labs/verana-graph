@@ -3,7 +3,7 @@
   "info": {
     "title": "Verana Graph API",
     "description": "Query layer of the Verana trust registry. Search and traversal per the v4 Verana Graph specification, ingested live from the indexer.",
-    "version": "0.1.0"
+    "version": "1.0.0"
   },
   "paths": {
     "/health": {
@@ -29,7 +29,9 @@
                 "description": "Request payload for the verana-graph faceted-search endpoint `POST /v4/graph/search` (per [TG-FCT-1] through [TG-FCT-7]). Filter field names use the dotted form from [TG-FCT-3] / [TG-FCT-4]. Filter values are either bare scalars (interpreted as `eq`) or operator objects (`{ eq | in | range | prefix | contains | containsAny }`). The optional `snippet` selector projects the queried surface's [TG-FCT-6b] field groups onto its hits per [TG-FCT-6c], validated per surface via the root `allOf` branches. Per [TG-FCT-7] pagination is cursor-based; offset-based pagination MUST NOT be used. See `### Search REST binding` in the verana-graph spec.",
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["surface"],
+                "required": [
+                  "surface"
+                ],
                 "properties": {
                   "surface": {
                     "$ref": "#/components/schemas/search_request_SearchSurface",
@@ -58,7 +60,10 @@
                     "description": "Maximum number of hits to return on this page."
                   },
                   "cursor": {
-                    "type": ["string", "null"],
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "description": "Opaque pagination cursor from a previous response per [TG-FCT-7]. Omit (or set `null`) for the first page."
                   },
                   "includeUntrusted": {
@@ -80,7 +85,9 @@
                           "const": "Did"
                         }
                       },
-                      "required": ["surface"]
+                      "required": [
+                        "surface"
+                      ]
                     },
                     "then": {
                       "properties": {
@@ -97,7 +104,9 @@
                           "const": "Ecosystem"
                         }
                       },
-                      "required": ["surface"]
+                      "required": [
+                        "surface"
+                      ]
                     },
                     "then": {
                       "properties": {
@@ -114,7 +123,9 @@
                           "const": "Corporation"
                         }
                       },
-                      "required": ["surface"]
+                      "required": [
+                        "surface"
+                      ]
                     },
                     "then": {
                       "properties": {
@@ -131,7 +142,9 @@
                           "const": "CredentialSchema"
                         }
                       },
-                      "required": ["surface"]
+                      "required": [
+                        "surface"
+                      ]
                     },
                     "then": {
                       "properties": {
@@ -148,7 +161,9 @@
                           "const": "ServiceEndpoint"
                         }
                       },
-                      "required": ["surface"]
+                      "required": [
+                        "surface"
+                      ]
                     },
                     "then": {
                       "properties": {
@@ -210,7 +225,13 @@
                   "description": "Response envelope for the verana-graph faceted-search endpoint `POST /v4/graph/search` per [TG-FCT-6]. Each `hits[].snippet` MUST carry the per-surface core of [TG-FCT-6a]: the entity's primary key, `lastObservedAtTime`, the visibility flags applicable to the surface (`isTrustExpired` for `Did`, `archived` for `Ecosystem` / `CredentialSchema`), the DID binding on DID-bound surfaces (`did` on `Did` / `Corporation` / `Ecosystem`, `didId` on `ServiceEndpoint`), the `Did`-surface flags `trusted` / `isCorporation` / `isEcosystem`, and `type` / `serviceEndpoint` on the `ServiceEndpoint` surface. Each snippet additionally carries the field groups of the queried surface's [TG-FCT-6b] catalogue selected by the request's `snippet` projection per [TG-FCT-6c] (per-surface default sets; an unselected group is omitted entirely, never `null`). Implementations MAY surface additional per-card fields (additionalProperties open). Per [TG-FCT-7] the `cursor` field is opaque and is the only way to fetch subsequent pages. All datetime values are ISO 8601 / RFC 3339 UTC strings (see `#/$defs/Iso8601DateTime`). See `### Search REST binding` in the verana-graph spec.",
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["query", "totalCount", "hits", "facets", "cursor"],
+                  "required": [
+                    "query",
+                    "totalCount",
+                    "hits",
+                    "facets",
+                    "cursor"
+                  ],
                   "properties": {
                     "query": {
                       "type": "object",
@@ -236,7 +257,10 @@
                       "description": "Aggregations keyed by the queried surface's filter field names exactly as declared in [TG-FCT-3] (dotted on the `Did` surface, bare on the others) — identical to the keys the client uses in `filters`. Per [TG-FCT-6]: MUST contain an aggregation for every filter field referenced in the request's `filters` with an `eq` or `in` operator (bare scalars and arrays included — sugar for eq/in; prefix/range uses require none); SHOULD additionally carry an implementation-defined default set useful to the surface; near-unique-value fields (`lei`, `registryId`, `operatorName`) are never required beyond that rule."
                     },
                     "cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque pagination cursor for the next page, or `null` when this is the last page. Per [TG-FCT-7] cursors MAY become invalid; subsequent calls with an invalid cursor MUST return an explicit error rather than silently re-anchoring."
                     }
                   }
@@ -253,12 +277,17 @@
                   "description": "Shared error envelope for the Verana Graph traversal and faceted-search APIs, per [TG-ERR-1]. Every non-2xx response of either API MUST validate against this schema.",
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "properties": {
                     "error": {
                       "type": "object",
                       "additionalProperties": false,
-                      "required": ["code", "message"],
+                      "required": [
+                        "code",
+                        "message"
+                      ],
                       "properties": {
                         "code": {
                           "enum": [
@@ -291,12 +320,17 @@
                   "description": "Shared error envelope for the Verana Graph traversal and faceted-search APIs, per [TG-ERR-1]. Every non-2xx response of either API MUST validate against this schema.",
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "properties": {
                     "error": {
                       "type": "object",
                       "additionalProperties": false,
-                      "required": ["code", "message"],
+                      "required": [
+                        "code",
+                        "message"
+                      ],
                       "properties": {
                         "code": {
                           "enum": [
@@ -329,12 +363,17 @@
                   "description": "Shared error envelope for the Verana Graph traversal and faceted-search APIs, per [TG-ERR-1]. Every non-2xx response of either API MUST validate against this schema.",
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "properties": {
                     "error": {
                       "type": "object",
                       "additionalProperties": false,
-                      "required": ["code", "message"],
+                      "required": [
+                        "code",
+                        "message"
+                      ],
                       "properties": {
                         "code": {
                           "enum": [
@@ -374,7 +413,10 @@
                 "description": "Request payload for the verana-graph canonical traversal queries [TG-QRY-3]. The single endpoint `POST /v4/graph/traverse` dispatches on the `query` selector; the `input` shape is fixed per query. See `### Traversal REST binding` in the verana-graph spec.",
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["query", "input"],
+                "required": [
+                  "query",
+                  "input"
+                ],
                 "properties": {
                   "query": {
                     "$ref": "#/components/schemas/traverse_request_TraversalQueryId"
@@ -745,7 +787,11 @@
                   "description": "Response payload for the verana-graph canonical traversal queries [TG-QRY-3]. The single endpoint `POST /v4/graph/traverse` returns a per-query `output` shape mirroring the **Output (shape)** column of the [TG-QRY-3] tables. Every entity reference other than an `IdOnlyRef` carries its primary key, `lastObservedAtTime`, and the visibility flags applicable to its type (`isTrustExpired` for `Did`, `archived` for `Ecosystem` / `CredentialSchema`). All datetime values are ISO 8601 / RFC 3339 UTC strings (see `#/$defs/Iso8601DateTime`). See `### Traversal REST binding` in the verana-graph spec.",
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["query", "evaluatedAtTime", "output"],
+                  "required": [
+                    "query",
+                    "evaluatedAtTime",
+                    "output"
+                  ],
                   "properties": {
                     "query": {
                       "$ref": "#/components/schemas/traverse_response_TraversalQueryId"
@@ -758,7 +804,10 @@
                       "description": "Per-query output shape; constrained by the discriminated `allOf` branch matching `query`."
                     },
                     "nextCursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Keyset continuation cursor per [TG-QRY-6]; `null` on the last page and for non-paginated (shape-fixed) queries."
                     }
                   },
@@ -1081,12 +1130,17 @@
                   "description": "Shared error envelope for the Verana Graph traversal and faceted-search APIs, per [TG-ERR-1]. Every non-2xx response of either API MUST validate against this schema.",
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "properties": {
                     "error": {
                       "type": "object",
                       "additionalProperties": false,
-                      "required": ["code", "message"],
+                      "required": [
+                        "code",
+                        "message"
+                      ],
                       "properties": {
                         "code": {
                           "enum": [
@@ -1119,12 +1173,17 @@
                   "description": "Shared error envelope for the Verana Graph traversal and faceted-search APIs, per [TG-ERR-1]. Every non-2xx response of either API MUST validate against this schema.",
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "properties": {
                     "error": {
                       "type": "object",
                       "additionalProperties": false,
-                      "required": ["code", "message"],
+                      "required": [
+                        "code",
+                        "message"
+                      ],
                       "properties": {
                         "code": {
                           "enum": [
@@ -1157,12 +1216,17 @@
                   "description": "Shared error envelope for the Verana Graph traversal and faceted-search APIs, per [TG-ERR-1]. Every non-2xx response of either API MUST validate against this schema.",
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["error"],
+                  "required": [
+                    "error"
+                  ],
                   "properties": {
                     "error": {
                       "type": "object",
                       "additionalProperties": false,
-                      "required": ["code", "message"],
+                      "required": [
+                        "code",
+                        "message"
+                      ],
                       "properties": {
                         "code": {
                           "enum": [
@@ -1193,7 +1257,13 @@
   "components": {
     "schemas": {
       "search_request_SearchSurface": {
-        "enum": ["Did", "Ecosystem", "Corporation", "CredentialSchema", "ServiceEndpoint"]
+        "enum": [
+          "Did",
+          "Ecosystem",
+          "Corporation",
+          "CredentialSchema",
+          "ServiceEndpoint"
+        ]
       },
       "search_request_SnippetSelectorDid": {
         "type": "object",
@@ -1374,16 +1444,28 @@
             "description": "Numeric / temporal range. At least one bound MUST be provided.",
             "properties": {
               "gt": {
-                "type": ["number", "string"]
+                "type": [
+                  "number",
+                  "string"
+                ]
               },
               "gte": {
-                "type": ["number", "string"]
+                "type": [
+                  "number",
+                  "string"
+                ]
               },
               "lt": {
-                "type": ["number", "string"]
+                "type": [
+                  "number",
+                  "string"
+                ]
               },
               "lte": {
-                "type": ["number", "string"]
+                "type": [
+                  "number",
+                  "string"
+                ]
               }
             }
           },
@@ -1425,12 +1507,23 @@
         "pattern": "^did:"
       },
       "search_response_SearchSurface": {
-        "enum": ["Did", "Ecosystem", "Corporation", "CredentialSchema", "ServiceEndpoint"]
+        "enum": [
+          "Did",
+          "Ecosystem",
+          "Corporation",
+          "CredentialSchema",
+          "ServiceEndpoint"
+        ]
       },
       "search_response_Hit": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["type", "id", "score", "snippet"],
+        "required": [
+          "type",
+          "id",
+          "score",
+          "snippet"
+        ],
         "description": "A single ranked hit. The `snippet` shape is discriminated by `type` per the per-surface variants in `#/$defs`.",
         "properties": {
           "type": {
@@ -1634,11 +1727,21 @@
       "search_response_DidSnippetService": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["pattern", "name", "type", "description", "logoUri", "logoDigestSri"],
+        "required": [
+          "pattern",
+          "name",
+          "type",
+          "description",
+          "logoUri",
+          "logoDigestSri"
+        ],
         "description": "[TG-FCT-6b] `service` group: the VS-level identity asserted by the `ServiceCredential`. The group is `null` (not this object) when the DID presents no ServiceCredential.",
         "properties": {
           "pattern": {
-            "enum": ["A", "B"],
+            "enum": [
+              "A",
+              "B"
+            ],
             "description": "Architecture pattern (`Did.pattern`); non-null whenever a ServiceCredential exists."
           },
           "name": {
@@ -1667,11 +1770,22 @@
       "search_response_DidSnippetOperator": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["kind", "name", "logoUri", "logoDigestSri", "countryCode", "registryId", "address"],
+        "required": [
+          "kind",
+          "name",
+          "logoUri",
+          "logoDigestSri",
+          "countryCode",
+          "registryId",
+          "address"
+        ],
         "description": "[TG-FCT-6b] `operator` group: the operative ORG-or-PERSONA identity the VS's trust chain rests on (Pattern A: self; Pattern B: issuer), per the [TG-FCT-3] derivation. The group is `null` (not this object) when the trust chain is incomplete.",
         "properties": {
           "kind": {
-            "enum": ["Organization", "Persona"],
+            "enum": [
+              "Organization",
+              "Persona"
+            ],
             "description": "Derived facet per [TG-FCT-3]."
           },
           "name": {
@@ -1679,7 +1793,10 @@
             "description": "Operative `OrganizationCredential.name` or `PersonaCredential.name`."
           },
           "logoUri": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "uri",
             "description": "Operative `OrganizationCredential.logoUri` or `PersonaCredential.avatarUri`; `null` for a Persona without avatar."
           },
@@ -1700,11 +1817,17 @@
             "description": "Operative `OrganizationCredential.countryCode` or `PersonaCredential.controllerCountryCode`."
           },
           "registryId": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Operative `OrganizationCredential.registryId`; `null` when the operator is a Persona."
           },
           "address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Operative `OrganizationCredential.address`; `null` when the operator is a Persona."
           }
         }
@@ -1712,7 +1835,13 @@
       "search_response_DidSnippetCorporation": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["id", "deposit", "slashedEvents", "lastSlashedAtTime", "slashedValue"],
+        "required": [
+          "id",
+          "deposit",
+          "slashedEvents",
+          "lastSlashedAtTime",
+          "slashedValue"
+        ],
         "description": "[TG-FCT-6b] `corporation` group: a Corporation's identity and trust signals, anchored on the hit's corporation binding — `Did.corporationId` (the owner Corporation per the VPR DID ownership invariant) on the `Did` surface, `Ecosystem.corporationId` (the controlling Corporation) on the `Ecosystem` surface. Never `null` as a group: `id` is always known; the other fields are `null` only while the referenced Corporation record is not yet materialised (bootstrap transient).",
         "properties": {
           "id": {
@@ -1721,11 +1850,17 @@
             "description": "Stable `uint64` id of the referenced Corporation (`Did.corporationId` / `Ecosystem.corporationId`). Never null."
           },
           "deposit": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Referenced `Corporation.deposit` (Coin string); `null` only while the Corporation record is not yet materialised (bootstrap transient)."
           },
           "slashedEvents": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 0,
             "description": "Referenced `Corporation.slashedEvents` (`0` when never slashed); `null` only while the Corporation record is not yet materialised (bootstrap transient)."
           },
@@ -1741,7 +1876,10 @@
             "description": "Referenced `Corporation.lastSlashedAtTime`; `null` when never slashed, or while the Corporation record is not yet materialised."
           },
           "slashedValue": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Referenced `Corporation.slashedValue` (Coin string); `null` when never slashed, or while the Corporation record is not yet materialised."
           }
         }
@@ -1749,7 +1887,11 @@
       "search_response_DidSnippetEndpoint": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["id", "type", "serviceEndpoint"],
+        "required": [
+          "id",
+          "type",
+          "serviceEndpoint"
+        ],
         "description": "One declared service endpoint of the DID Document, per [TG-FCT-6b] `endpoints`.",
         "properties": {
           "id": {
@@ -1790,7 +1932,14 @@
         }
       },
       "search_response_ParticipantRole": {
-        "enum": ["HOLDER", "ISSUER", "VERIFIER", "ISSUER_GRANTOR", "VERIFIER_GRANTOR", "ECOSYSTEM"],
+        "enum": [
+          "HOLDER",
+          "ISSUER",
+          "VERIFIER",
+          "ISSUER_GRANTOR",
+          "VERIFIER_GRANTOR",
+          "ECOSYSTEM"
+        ],
         "description": "Participant role per the `Participant` entity table."
       },
       "search_response_RoleCountMap": {
@@ -1807,7 +1956,12 @@
       "search_response_DidSnippetEcosystem": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["id", "archived", "participants", "schemas"],
+        "required": [
+          "id",
+          "archived",
+          "participants",
+          "schemas"
+        ],
         "description": "One `Ecosystem` entry whose current `did` is the hit DID, per [TG-FCT-6b] `ecosystems`. Archived entries appear with their `archived` flag — these are references from the hit, not direct Ecosystem-surface hits, so the [TG-FCT-2] gates do not apply to them.",
         "properties": {
           "id": {
@@ -1840,7 +1994,12 @@
       "search_response_DidSnippetParticipations": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["total", "ecosystemCount", "byRole", "entries"],
+        "required": [
+          "total",
+          "ecosystemCount",
+          "byRole",
+          "entries"
+        ],
         "description": "[TG-FCT-6b] `participations` group: the DID's ACTIVE `Participant` entries (non-ACTIVE entries never reach the search surface, per [TG-ACT-1]; the full lifecycle view is traversal query A7). `entries` MAY be truncated to an implementation-defined maximum; `total`, `ecosystemCount`, and `byRole` always reflect the untruncated population.",
         "properties": {
           "total": {
@@ -1863,7 +2022,13 @@
             "items": {
               "type": "object",
               "additionalProperties": true,
-              "required": ["id", "role", "credentialSchemaId", "schemaTitle", "ecosystemId"],
+              "required": [
+                "id",
+                "role",
+                "credentialSchemaId",
+                "schemaTitle",
+                "ecosystemId"
+              ],
               "properties": {
                 "id": {
                   "type": "integer",
@@ -1878,7 +2043,10 @@
                   "minimum": 0
                 },
                 "schemaTitle": {
-                  "type": ["string", "null"],
+                  "type": [
+                    "string",
+                    "null"
+                  ],
                   "description": "`title` of the loaded `CredentialSchema.body`; `null` when the body declares no title."
                 },
                 "ecosystemId": {
@@ -1893,7 +2061,10 @@
       "search_response_DidSnippetCredentials": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["total", "entries"],
+        "required": [
+          "total",
+          "entries"
+        ],
         "description": "[TG-FCT-6b] `credentials` group: the non-ECS Verifiable Trust Credentials presented by the DID (`Vtc` records reachable via `Did —REFERENCES_VP→ LVP —CONTAINS_VTC→ Vtc`). ECS credentials (ServiceCredential / OrganizationCredential / PersonaCredential) MUST NOT appear here — they are projected by the `service` and `operator` groups. A presented VTC is by definition held by the DID (no role field). `entries` MAY be truncated to an implementation-defined maximum; `total` always reflects the untruncated population.",
         "properties": {
           "total": {
@@ -1907,7 +2078,13 @@
             "items": {
               "type": "object",
               "additionalProperties": true,
-              "required": ["id", "credentialSchemaId", "schemaTitle", "ecosystemId", "attributes"],
+              "required": [
+                "id",
+                "credentialSchemaId",
+                "schemaTitle",
+                "ecosystemId",
+                "attributes"
+              ],
               "properties": {
                 "id": {
                   "type": "string",
@@ -1918,7 +2095,10 @@
                   "minimum": 0
                 },
                 "schemaTitle": {
-                  "type": ["string", "null"],
+                  "type": [
+                    "string",
+                    "null"
+                  ],
                   "description": "`title` of the loaded `CredentialSchema.body`; `null` when the body declares no title."
                 },
                 "ecosystemId": {
@@ -1927,7 +2107,10 @@
                   "description": "The issuing ecosystem (`Vtc.ecosystemId`)."
                 },
                 "attributes": {
-                  "type": ["object", "null"],
+                  "type": [
+                    "object",
+                    "null"
+                  ],
                   "description": "The credential's `credentialSubject` claims verbatim, minus the subject `id` (the hit's own DID); `null` when the implementation has not fetched the VP body per [TG-DEREF-3] (the fetch is RECOMMENDED)."
                 }
               }
@@ -1938,7 +2121,12 @@
       "search_response_SchemaRef": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["id", "title", "archived", "participants"],
+        "required": [
+          "id",
+          "title",
+          "archived",
+          "participants"
+        ],
         "description": "Owned-schema reference: the shared item shape of the `Did`-surface `ecosystems[].schemas` and the `Ecosystem`-surface `schemas` group.",
         "properties": {
           "id": {
@@ -1946,7 +2134,10 @@
             "minimum": 0
           },
           "title": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "`title` of the loaded `CredentialSchema.body`; `null` when the body declares no title."
           },
           "archived": {
@@ -1961,7 +2152,9 @@
       "search_response_IdOnlyRef": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "description": "Reference to a `CredentialSchema` record that is not yet materialised, per [TG-FCT-6b].",
         "properties": {
           "id": {
@@ -1973,7 +2166,13 @@
       "search_response_DidCard": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["did", "trusted", "isTrustExpired", "service", "operator"],
+        "required": [
+          "did",
+          "trusted",
+          "isTrustExpired",
+          "service",
+          "operator"
+        ],
         "description": "[TG-FCT-6b] shared `didCard` group: the surface's bound DID rendered as a result card. Never `null` (the bound DID always exists as a `Did` record); `trusted` / `isTrustExpired` describe the bound DID and never gate the hit ([TG-FCT-2] non-propagation).",
         "properties": {
           "did": {
@@ -2012,7 +2211,11 @@
       "search_response_GovernanceFrameworkSummary": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["version", "activeSince", "documents"],
+        "required": [
+          "version",
+          "activeSince",
+          "documents"
+        ],
         "description": "Inline governance-framework summary (`cgf` / `egf` per [TG-DEREF-2a] / [TG-DEREF-2b]): active version, activation time, and document metadata — never document bodies. `activeSince` is required-present per the [TG-FCT-6b] null-not-omitted rule (`null` when the upstream inline object omits it), even though the persisted entity-table shape writes it as optional.",
         "properties": {
           "version": {
@@ -2035,7 +2238,11 @@
             "items": {
               "type": "object",
               "additionalProperties": true,
-              "required": ["language", "url", "digestSri"],
+              "required": [
+                "language",
+                "url",
+                "digestSri"
+              ],
               "properties": {
                 "language": {
                   "type": "string"
@@ -2055,7 +2262,11 @@
       "search_response_EntityStats": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["participants", "issuedCredentials", "verifiedCredentials"],
+        "required": [
+          "participants",
+          "issuedCredentials",
+          "verifiedCredentials"
+        ],
         "description": "[TG-FCT-6b] `stats` group: the entity-table counters of the hit (`Ecosystem` or `CredentialSchema`).",
         "properties": {
           "participants": {
@@ -2074,7 +2285,12 @@
       "search_response_EcosystemSnippet": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["id", "did", "archived", "lastObservedAtTime"],
+        "required": [
+          "id",
+          "did",
+          "archived",
+          "lastObservedAtTime"
+        ],
         "description": "An `Ecosystem` hit snippet: the [TG-FCT-6a] core plus the [TG-FCT-6b] Ecosystem-surface groups selected by the projection (default set: `corporation`, `stats`, `didCard`). An unselected group is omitted entirely, never `null`.",
         "properties": {
           "id": {
@@ -2133,7 +2349,13 @@
       "search_response_CorporationTrust": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["policyAddress", "deposit", "slashedEvents", "lastSlashedAtTime", "slashedValue"],
+        "required": [
+          "policyAddress",
+          "deposit",
+          "slashedEvents",
+          "lastSlashedAtTime",
+          "slashedValue"
+        ],
         "description": "[TG-FCT-6b] Corporation `trust` group: on-chain signing identity and trust signals from the Corporation record.",
         "properties": {
           "policyAddress": {
@@ -2161,7 +2383,10 @@
             "description": "`null` when never slashed."
           },
           "slashedValue": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Coin string; `null` when never slashed."
           }
         }
@@ -2169,7 +2394,10 @@
       "search_response_CorporationEcosystems": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["total", "entries"],
+        "required": [
+          "total",
+          "entries"
+        ],
         "description": "[TG-FCT-6b] Corporation `ecosystems` group: the Ecosystems this Corporation controls.",
         "properties": {
           "total": {
@@ -2181,7 +2409,10 @@
             "items": {
               "type": "object",
               "additionalProperties": true,
-              "required": ["id", "archived"],
+              "required": [
+                "id",
+                "archived"
+              ],
               "properties": {
                 "id": {
                   "type": "integer",
@@ -2198,7 +2429,10 @@
       "search_response_CorporationDids": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["total", "entries"],
+        "required": [
+          "total",
+          "entries"
+        ],
         "description": "[TG-FCT-6b] Corporation `dids` group: the DIDs this Corporation owns per the VPR DID ownership invariant. Unbounded — `entries` MAY be truncated to an implementation-defined maximum; `total` always reflects the untruncated population.",
         "properties": {
           "total": {
@@ -2210,7 +2444,11 @@
             "items": {
               "type": "object",
               "additionalProperties": true,
-              "required": ["did", "trusted", "isTrustExpired"],
+              "required": [
+                "did",
+                "trusted",
+                "isTrustExpired"
+              ],
               "properties": {
                 "did": {
                   "$ref": "#/components/schemas/search_response_DidString"
@@ -2229,7 +2467,11 @@
       "search_response_CorporationSnippet": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["id", "did", "lastObservedAtTime"],
+        "required": [
+          "id",
+          "did",
+          "lastObservedAtTime"
+        ],
         "description": "A `Corporation` hit snippet: the [TG-FCT-6a] core plus the [TG-FCT-6b] Corporation-surface groups selected by the projection (default set: `trust`, `didCard`). An unselected group is omitted entirely, never `null`.",
         "properties": {
           "id": {
@@ -2276,7 +2518,12 @@
       "search_response_CredentialSchemaMeta": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["type", "digestSri", "title", "description"],
+        "required": [
+          "type",
+          "digestSri",
+          "title",
+          "description"
+        ],
         "description": "[TG-FCT-6b] CredentialSchema `schema` group: record metadata plus the loaded body's title and description.",
         "properties": {
           "type": {
@@ -2286,11 +2533,17 @@
             "$ref": "#/components/schemas/search_response_DigestSri"
           },
           "title": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "`title` of the loaded body; `null` when the body declares none."
           },
           "description": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "`description` of the loaded body; `null` when the body declares none."
           }
         }
@@ -2298,7 +2551,11 @@
       "search_response_CredentialSchemaSnippet": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["id", "archived", "lastObservedAtTime"],
+        "required": [
+          "id",
+          "archived",
+          "lastObservedAtTime"
+        ],
         "description": "A `CredentialSchema` hit snippet: the [TG-FCT-6a] core plus the [TG-FCT-6b] CredentialSchema-surface groups selected by the projection (default set: `schema`, `ecosystem`). Not DID-bound: no `didCard`. An unselected group is omitted entirely, never `null`.",
         "properties": {
           "id": {
@@ -2318,7 +2575,10 @@
           "ecosystem": {
             "type": "object",
             "additionalProperties": true,
-            "required": ["id", "archived"],
+            "required": [
+              "id",
+              "archived"
+            ],
             "description": "[TG-FCT-6b] `ecosystem` group — the owning Ecosystem (exactly one, per [TG-EDGE-3]). Present iff selected (default set).",
             "properties": {
               "id": {
@@ -2343,7 +2603,13 @@
       "search_response_ServiceEndpointSnippet": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["id", "didId", "type", "serviceEndpoint", "lastObservedAtTime"],
+        "required": [
+          "id",
+          "didId",
+          "type",
+          "serviceEndpoint",
+          "lastObservedAtTime"
+        ],
         "description": "A `ServiceEndpoint` hit snippet: the [TG-FCT-6a] core — which includes `type` and the verbatim `serviceEndpoint`, the payload of the surface — plus the `didCard` group when selected (default set).",
         "properties": {
           "id": {
@@ -2398,7 +2664,10 @@
         "items": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["value", "count"],
+          "required": [
+            "value",
+            "count"
+          ],
           "properties": {
             "value": {
               "anyOf": [
@@ -2456,11 +2725,23 @@
         "description": "Cosmos bech32 address with the `verana` HRP. Used for the per-Participant `vsOperator` account and for `Corporation.policyAddress`."
       },
       "traverse_request_EcsSchemaName": {
-        "enum": ["ServiceCredential", "OrganizationCredential", "PersonaCredential", "UserAgentCredential"],
+        "enum": [
+          "ServiceCredential",
+          "OrganizationCredential",
+          "PersonaCredential",
+          "UserAgentCredential"
+        ],
         "description": "ECS schema discriminator."
       },
       "traverse_request_ParticipantRole": {
-        "enum": ["HOLDER", "ISSUER", "VERIFIER", "ISSUER_GRANTOR", "VERIFIER_GRANTOR", "ECOSYSTEM"]
+        "enum": [
+          "HOLDER",
+          "ISSUER",
+          "VERIFIER",
+          "ISSUER_GRANTOR",
+          "VERIFIER_GRANTOR",
+          "ECOSYSTEM"
+        ]
       },
       "traverse_request_EntityType": {
         "enum": [
@@ -2479,7 +2760,9 @@
       "traverse_request_DidInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["did"],
+        "required": [
+          "did"
+        ],
         "properties": {
           "did": {
             "$ref": "#/components/schemas/traverse_request_DidString",
@@ -2490,7 +2773,9 @@
       "traverse_request_DidEcsSchemaInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["did"],
+        "required": [
+          "did"
+        ],
         "properties": {
           "did": {
             "$ref": "#/components/schemas/traverse_request_DidString"
@@ -2504,7 +2789,9 @@
       "traverse_request_DidRoleInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["did"],
+        "required": [
+          "did"
+        ],
         "properties": {
           "did": {
             "$ref": "#/components/schemas/traverse_request_DidString"
@@ -2518,7 +2805,10 @@
       "traverse_request_CredentialIdInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["did", "credentialId"],
+        "required": [
+          "did",
+          "credentialId"
+        ],
         "properties": {
           "did": {
             "$ref": "#/components/schemas/traverse_request_DidString",
@@ -2533,7 +2823,9 @@
       "traverse_request_EcosystemIdInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["ecosystemId"],
+        "required": [
+          "ecosystemId"
+        ],
         "properties": {
           "ecosystemId": {
             "type": "integer",
@@ -2545,7 +2837,9 @@
       "traverse_request_EcosystemRoleSchemaInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["ecosystemId"],
+        "required": [
+          "ecosystemId"
+        ],
         "properties": {
           "ecosystemId": {
             "type": "integer",
@@ -2565,7 +2859,9 @@
       "traverse_request_CredentialSchemaIdInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["credentialSchemaId"],
+        "required": [
+          "credentialSchemaId"
+        ],
         "properties": {
           "credentialSchemaId": {
             "type": "integer",
@@ -2577,7 +2873,9 @@
       "traverse_request_CredentialSchemaIdRoleInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["credentialSchemaId"],
+        "required": [
+          "credentialSchemaId"
+        ],
         "properties": {
           "credentialSchemaId": {
             "type": "integer",
@@ -2592,7 +2890,9 @@
       "traverse_request_CorporationIdInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["corporationId"],
+        "required": [
+          "corporationId"
+        ],
         "properties": {
           "corporationId": {
             "type": "integer",
@@ -2604,7 +2904,10 @@
       "traverse_request_PathInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["from", "to"],
+        "required": [
+          "from",
+          "to"
+        ],
         "properties": {
           "from": {
             "$ref": "#/components/schemas/traverse_request_EntityRef",
@@ -2619,7 +2922,10 @@
       "traverse_request_EntityRef": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["type", "id"],
+        "required": [
+          "type",
+          "id"
+        ],
         "properties": {
           "type": {
             "$ref": "#/components/schemas/traverse_request_EntityType"
@@ -2641,7 +2947,9 @@
       "traverse_request_ParticipantIdInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["participantId"],
+        "required": [
+          "participantId"
+        ],
         "properties": {
           "participantId": {
             "type": "integer",
@@ -2699,17 +3007,41 @@
         "pattern": "^did:"
       },
       "traverse_response_Pattern": {
-        "enum": ["A", "B", null],
+        "enum": [
+          "A",
+          "B",
+          null
+        ],
         "description": "Architecture pattern per VS-REQ-3 / VS-REQ-4 (A: self-issued; B: delegated); null when the DID presents no ServiceCredential (untrusted DID)."
       },
       "traverse_response_ParticipantState": {
-        "enum": ["ACTIVE", "FUTURE", "INACTIVE", "EXPIRED", "REVOKED", "SLASHED", "REPAID"]
+        "enum": [
+          "ACTIVE",
+          "FUTURE",
+          "INACTIVE",
+          "EXPIRED",
+          "REVOKED",
+          "SLASHED",
+          "REPAID"
+        ]
       },
       "traverse_response_ParticipantRole": {
-        "enum": ["HOLDER", "ISSUER", "VERIFIER", "ISSUER_GRANTOR", "VERIFIER_GRANTOR", "ECOSYSTEM"]
+        "enum": [
+          "HOLDER",
+          "ISSUER",
+          "VERIFIER",
+          "ISSUER_GRANTOR",
+          "VERIFIER_GRANTOR",
+          "ECOSYSTEM"
+        ]
       },
       "traverse_response_EcsSchemaName": {
-        "enum": ["ServiceCredential", "OrganizationCredential", "PersonaCredential", "UserAgentCredential"]
+        "enum": [
+          "ServiceCredential",
+          "OrganizationCredential",
+          "PersonaCredential",
+          "UserAgentCredential"
+        ]
       },
       "traverse_response_EntityType": {
         "enum": [
@@ -2727,7 +3059,10 @@
       "traverse_response_EntityRef": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["type", "id"],
+        "required": [
+          "type",
+          "id"
+        ],
         "properties": {
           "type": {
             "$ref": "#/components/schemas/traverse_response_EntityType"
@@ -2748,7 +3083,10 @@
       "traverse_response_GovernanceFramework": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["version", "documents"],
+        "required": [
+          "version",
+          "documents"
+        ],
         "description": "Active Governance Framework (CGF on a Corporation, EGF on an Ecosystem). Mirrors the indexer-side `GovernanceFramework` shape.",
         "properties": {
           "version": {
@@ -2764,7 +3102,11 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["language", "url", "digestSri"],
+              "required": [
+                "language",
+                "url",
+                "digestSri"
+              ],
               "properties": {
                 "language": {
                   "type": "string",
@@ -2785,7 +3127,11 @@
       "traverse_response_DidRef": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["did", "lastObservedAtTime", "isTrustExpired"],
+        "required": [
+          "did",
+          "lastObservedAtTime",
+          "isTrustExpired"
+        ],
         "description": "Minimal Did reference. `isTrustExpired` is the [[TG-ACT-3]] visibility flag; per [[TG-QRY-3]] every entity reference MUST carry the visibility flags applicable to its type, and it is always computable as `expiresAtTime` non-null and `< now`.",
         "properties": {
           "did": {
@@ -2813,7 +3159,11 @@
       "traverse_response_CorporationRef": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "did", "lastObservedAtTime"],
+        "required": [
+          "id",
+          "did",
+          "lastObservedAtTime"
+        ],
         "properties": {
           "id": {
             "type": "integer",
@@ -2852,7 +3202,13 @@
       "traverse_response_EcosystemRef": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "did", "corporationId", "archived", "lastObservedAtTime"],
+        "required": [
+          "id",
+          "did",
+          "corporationId",
+          "archived",
+          "lastObservedAtTime"
+        ],
         "properties": {
           "id": {
             "type": "integer",
@@ -2889,7 +3245,13 @@
       "traverse_response_CredentialSchemaRef": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "type", "digestSri", "archived", "lastObservedAtTime"],
+        "required": [
+          "id",
+          "type",
+          "digestSri",
+          "archived",
+          "lastObservedAtTime"
+        ],
         "properties": {
           "id": {
             "type": "integer",
@@ -2979,7 +3341,10 @@
             "minimum": 0
           },
           "validatorParticipantId": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 0,
             "description": "Stable VPR id of the validator Participant (parent in the permission tree). `null` iff `role = ECOSYSTEM`; non-negative integer otherwise. The graph persists the value as received from the indexer; the role-conditional rule is enforced upstream at the indexer's ingress."
           },
@@ -3108,7 +3473,10 @@
       "traverse_response_LinkedVerifiablePresentationRef": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "lastObservedAtTime"],
+        "required": [
+          "id",
+          "lastObservedAtTime"
+        ],
         "properties": {
           "id": {
             "type": "string",
@@ -3131,7 +3499,12 @@
       "traverse_response_ServiceEndpointRef": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "type", "serviceEndpoint", "lastObservedAtTime"],
+        "required": [
+          "id",
+          "type",
+          "serviceEndpoint",
+          "lastObservedAtTime"
+        ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/traverse_response_DidString"
@@ -3190,7 +3563,9 @@
       "traverse_response_IdOnlyRef": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "description": "Reference to a `CredentialSchema`, `Ecosystem` or `Corporation` record that is not yet materialised, per [[TG-QRY-3]].",
         "properties": {
           "id": {
@@ -3258,7 +3633,10 @@
       "traverse_response_A2Output": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["corporation", "ecosystems"],
+        "required": [
+          "corporation",
+          "ecosystems"
+        ],
         "description": "A2 — Governing chain. Owning Corporation and the deduplicated set of Ecosystems whose schemas the DID participates in.",
         "properties": {
           "corporation": {
@@ -3299,7 +3677,11 @@
         "items": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["credential", "schema", "ecosystem"],
+          "required": [
+            "credential",
+            "schema",
+            "ecosystem"
+          ],
           "properties": {
             "credential": {
               "$ref": "#/components/schemas/traverse_response_EcsCredentialRef"
@@ -3336,7 +3718,10 @@
       "traverse_response_A6Output": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["ecsCredentials", "vtcs"],
+        "required": [
+          "ecsCredentials",
+          "vtcs"
+        ],
         "description": "A6 — Issued credentials (DID is issuer). Both EcsCredential and Vtc records, each enriched with subject/schema/ecosystem context.",
         "properties": {
           "ecsCredentials": {
@@ -3344,7 +3729,11 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["credential", "schema", "ecosystem"],
+              "required": [
+                "credential",
+                "schema",
+                "ecosystem"
+              ],
               "properties": {
                 "credential": {
                   "$ref": "#/components/schemas/traverse_response_EcsCredentialRef"
@@ -3380,7 +3769,11 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["credential", "schema", "ecosystem"],
+              "required": [
+                "credential",
+                "schema",
+                "ecosystem"
+              ],
               "properties": {
                 "credential": {
                   "$ref": "#/components/schemas/traverse_response_VtcRef"
@@ -3419,7 +3812,11 @@
         "items": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["participant", "schema", "ecosystem"],
+          "required": [
+            "participant",
+            "schema",
+            "ecosystem"
+          ],
           "properties": {
             "participant": {
               "$ref": "#/components/schemas/traverse_response_ParticipantRef"
@@ -3450,7 +3847,13 @@
       "traverse_response_B1Output": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["credential", "issuerDid", "issuerParticipant", "schema", "ecosystem"],
+        "required": [
+          "credential",
+          "issuerDid",
+          "issuerParticipant",
+          "schema",
+          "ecosystem"
+        ],
         "description": "B1 — Issuer recovery for a credential surfaced in the graph (per [[TG-INGEST-6]]).",
         "properties": {
           "credential": {
@@ -3487,7 +3890,11 @@
       "traverse_response_B2Output": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["credential", "subjectDid", "holderParticipant"],
+        "required": [
+          "credential",
+          "subjectDid",
+          "holderParticipant"
+        ],
         "description": "B2 — Holder recovery for a credential surfaced in the graph.",
         "properties": {
           "credential": {
@@ -3546,7 +3953,10 @@
         "items": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["did", "participant"],
+          "required": [
+            "did",
+            "participant"
+          ],
           "properties": {
             "did": {
               "$ref": "#/components/schemas/traverse_response_DidRef"
@@ -3560,7 +3970,9 @@
       "traverse_response_C3Output": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["egf"],
+        "required": [
+          "egf"
+        ],
         "description": "C3 — Ecosystem Governance Framework summary; document bodies are surfaced only if locally fetched.",
         "properties": {
           "egf": {
@@ -3571,7 +3983,10 @@
       "traverse_response_D1Output": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["ecsCredentials", "vtcs"],
+        "required": [
+          "ecsCredentials",
+          "vtcs"
+        ],
         "description": "D1 — Credentials based on the schema (both ECS credentials and Vtcs).",
         "properties": {
           "ecsCredentials": {
@@ -3605,7 +4020,9 @@
       "traverse_response_E3Output": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["cgf"],
+        "required": [
+          "cgf"
+        ],
         "description": "E3 — Corporation Governance Framework summary; document bodies are surfaced only if locally fetched.",
         "properties": {
           "cgf": {
@@ -3621,7 +4038,9 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["node"],
+              "required": [
+                "node"
+              ],
               "properties": {
                 "node": {
                   "$ref": "#/components/schemas/traverse_response_EntityRef"
