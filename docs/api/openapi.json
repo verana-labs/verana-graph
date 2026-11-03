@@ -3,7 +3,7 @@
   "info": {
     "title": "Verana Graph API",
     "description": "Query layer of the Verana trust registry. Search and traversal per the v4 Verana Graph specification, ingested live from the indexer.",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "paths": {
     "/health": {
