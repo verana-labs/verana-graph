@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/verana-labs/verana-graph/compare/v1.0.0...v1.0.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **ci:** keep the exported OpenAPI version in step with releases ([#57](https://github.com/verana-labs/verana-graph/issues/57)) ([5cf69e1](https://github.com/verana-labs/verana-graph/commit/5cf69e1b9f2d32554aa4d838a9ffbaea744414ea))
+
 ## [1.0.0](https://github.com/verana-labs/verana-graph/compare/v0.1.0...v1.0.0) (2026-10-14)
 
 
