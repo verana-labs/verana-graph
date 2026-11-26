@@ -66,7 +66,11 @@ helm install graph ./charts/verana-graph --namespace verana --create-namespace \
 | `database.image.tag` | `"16-alpine"` | Embedded Postgres image tag (`enabled: true` only) |
 | `database.storage.size` | `2Gi` | Embedded Postgres volume size, see Storage sizing below |
 | `database.storage.storageClassName` | `""` | `""` = cluster default; e.g. `csi-cinder-classic` on devnet |
-| `ingress.enabled` | `false` | Publish an Ingress |
+| `ingress.enabled` | `false` | Publish the public route |
+| `ingress.type` | `ingress` | `ingress` publishes an Ingress, `gateway` an HTTPRoute |
+| `ingress.gateway.name` | `""` | Gateway that accepts the route (type `gateway`) |
+| `ingress.gateway.namespace` | `""` | Namespace of the Gateway, when it is another one |
+| `ingress.gateway.sectionName` | `""` | Listener of the Gateway, when it has more than one |
 | `ingress.websocketTimeoutSeconds` | `3600` | Proxy timeout for the block-progress stream |
 
 ### Storage sizing
