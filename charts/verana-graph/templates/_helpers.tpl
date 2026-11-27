@@ -65,3 +65,17 @@ value in the manifest.
       name: {{ required "database.pwdSecret.name is required: the DB password must come from a Secret" .Values.database.pwdSecret.name }}
       key: {{ required "database.pwdSecret.key is required: the DB password must come from a Secret" .Values.database.pwdSecret.key }}
 {{- end }}
+
+{{/*
+The kind of public route the chart publishes: "ingress" for an Ingress served by
+ingress-nginx, "gateway" for an HTTPRoute served by a Gateway API controller.
+Any other value stops the render, because a typo would otherwise publish an
+Ingress that a cluster without ingress-nginx never serves.
+*/}}
+{{- define "verana-graph.routeType" -}}
+{{- $t := .Values.ingress.type | default "ingress" -}}
+{{- if not (has $t (list "ingress" "gateway")) -}}
+{{- fail (printf "ingress.type must be ingress or gateway, not %q" $t) -}}
+{{- end -}}
+{{- $t -}}
+{{- end }}

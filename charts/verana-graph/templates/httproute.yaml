@@ -1,4 +1,4 @@
-{{- if and .Values.ingress.enabled (eq (.Values.ingress.type | default "ingress") "gateway") }}
+{{- if and .Values.ingress.enabled (eq (include "verana-graph.routeType" .) "gateway") }}
 {{- $gw := .Values.ingress.gateway | default dict }}
 # Gateway API route, for a cluster served by a Gateway instead of ingress-nginx.
 # The Gateway listener named here terminates TLS, so ingress.tlsSecret, the
